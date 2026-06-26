@@ -1,6 +1,21 @@
 import { useState } from 'react';
 import { wallets } from '../api/client';
 
+function SolscanLink({ type, value, children }: { type: 'account' | 'tx' | 'token'; value: string; children: React.ReactNode }) {
+  const url = `https://solscan.io/${type}/${value}`;
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      style={{ color: '#7c4dff', textDecoration: 'none' }}
+      onClick={e => e.stopPropagation()}
+    >
+      {children}
+    </a>
+  );
+}
+
 interface Wallet {
   id: number;
   address: string;
@@ -111,7 +126,18 @@ export default function WalletList({
             }}
             title={w.address}
           >
-            {w.label || w.address.slice(0, 8) + '...' + w.address.slice(-4)}
+            {w.label || (
+              <SolscanLink type="account" value={w.address}>
+                {w.address.slice(0, 8) + '...' + w.address.slice(-4)}
+              </SolscanLink>
+            )}
+            {w.label && (
+              <span style={{ fontSize: '0.75rem', color: '#888', marginLeft: '0.5rem' }}>
+                <SolscanLink type="account" value={w.address}>
+                  {w.address.slice(0, 6)}...{w.address.slice(-4)}
+                </SolscanLink>
+              </span>
+            )}
           </button>
         ))}
       </div>

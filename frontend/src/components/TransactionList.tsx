@@ -1,6 +1,21 @@
 import { useState, useEffect } from 'react';
 import { transactions as txApi } from '../api/client';
 
+function SolscanLink({ type, value, children, style: customStyle }: { type: 'account' | 'tx' | 'token'; value: string; children: React.ReactNode; style?: React.CSSProperties }) {
+  const url = `https://solscan.io/${type}/${value}`;
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      style={{ color: '#7c4dff', textDecoration: 'none', ...customStyle }}
+      onClick={e => e.stopPropagation()}
+    >
+      {children}
+    </a>
+  );
+}
+
 interface Transaction {
   id: number;
   signature: string;
@@ -15,6 +30,7 @@ interface Transaction {
   to_address: string;
   timestamp: string;
   wallet_label: string | null;
+  token_mint: string;
 }
 
 export default function TransactionList({ walletId }: { walletId: number | null }) {
@@ -111,10 +127,17 @@ export default function TransactionList({ walletId }: { walletId: number | null 
                 </span>
 
                 <div style={{ overflow: 'hidden' }}>
-                  <div style={{ fontWeight: 500 }}>
-                    {formatAmount(tx.amount)} {tx.token_symbol}
+                  <div style={{ fontWeight: 500, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span>{formatAmount(tx.amount)}</span>
+                    {tx.token_mint ? (
+                      <SolscanLink type="token" value={tx.token_mint}>
+                        {tx.token_symbol}
+                      </SolscanLink>
+                    ) : (
+                      tx.token_symbol
+                    )}
                     {tx.token_name && tx.token_name !== tx.token_symbol && (
-                      <span style={{ color: '#666', marginLeft: '0.5rem', fontSize: '0.875rem' }}>({tx.token_name})</span>
+                      <span style={{ color: '#666', fontSize: '0.875rem' }}>({tx.token_name})</span>
                     )}
                   </div>
                   {tx.counterparty_symbol && (
@@ -122,8 +145,19 @@ export default function TransactionList({ walletId }: { walletId: number | null 
                       for {tx.counterparty_amount ? formatAmount(tx.counterparty_amount) : '?'} {tx.counterparty_symbol}
                     </div>
                   )}
-                  <div style={{ fontSize: '0.75rem', color: '#666', marginTop: '0.25rem' }}>
-                    {formatAddress(tx.from_address)} → {formatAddress(tx.to_address)}
+                  <div style={{ fontSize: '0.75rem', color: '#666', marginTop: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <SolscanLink type="account" value={tx.from_address}>
+                      {formatAddress(tx.from_address)}
+                    </SolscanLink>
+                    <span>→</span>
+                    <SolscanLink type="account" value={tx.to_address}>
+                      {formatAddress(tx.to_address)}
+                    </SolscanLink>
+                  </div>
+                  <div style={{ fontSize: '0.75rem', marginTop: '0.25rem' }}>
+                    <SolscanLink type="tx" value={tx.signature} style={{ fontSize: '0.7rem', color: '#555' }}>
+                      {tx.signature.slice(0, 16)}...{tx.signature.slice(-8)}
+                    </SolscanLink>
                   </div>
                 </div>
 
