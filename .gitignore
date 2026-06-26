@@ -28,5 +28,6 @@ Thumbs.db
 # Cloudflare tunnel credentials (NEVER commit these)
 *.json
 !package.json
+!package-lock.json
 !tsconfig.json
 !tsconfig.node.json
