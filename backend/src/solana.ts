@@ -36,7 +36,7 @@ export async function fetchTransactions(address: string, beforeSignature?: strin
     throw new Error(`Helius API error: ${response.status} ${await response.text()}`);
   }
 
-  const txs = await response.json();
+  const txs = await response.json() as any[];
   return txs.map((tx: any) => parseTransaction(tx));
 }
 

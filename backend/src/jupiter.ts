@@ -48,7 +48,7 @@ export async function getTokenInfo(mint: string): Promise<{
       throw new Error(`Jupiter API error: ${response.status}`);
     }
 
-    const data: JupiterTokenInfo = await response.json();
+    const data = await response.json() as JupiterTokenInfo;
     
     const isVerified = data.tags?.includes('verified') || data.tags?.includes('community') || false;
     const hasCoingecko = !!data.extensions?.coingeckoId;
@@ -105,8 +105,8 @@ export async function getTokenPrice(mint: string): Promise<number | null> {
   try {
     const response = await fetch(`https://api.jup.ag/price/v2?ids=${mint}`);
     if (!response.ok) return null;
-    const data = await response.json();
-    return data.data?.[mint]?.price || null;
+    const data = await response.json() as { data?: Record<string, { price?: string | number }> };
+    return Number(data.data?.[mint]?.price) || null;
   } catch {
     return null;
   }
