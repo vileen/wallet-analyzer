@@ -94,7 +94,7 @@ async function processTransaction(
     usdValue = realAmount * price;
   }
 
-  const isSpam = shouldFilterAsSpam(tokenInfo, usdValue);
+  const isSpam = false; // Jupiter API is dead, disable spam detection
   if (isSpam) {
     console.log(`[Worker] Skipping spam tx: ${tx.signature}`);
   }
@@ -135,14 +135,9 @@ async function processTransaction(
 }
 
 function shouldFilterAsSpam(tokenInfo: any, usdValue: number | null): boolean {
-  // Skip if no Jupiter entry and tiny value
-  if (!tokenInfo) return true;
-  
-  // Skip if Jupiter score < 20
-  if (tokenInfo.jupiterScore < 20) return true;
-  
-  // Skip if USD value < $0.01
-  if (usdValue !== null && usdValue < 0.01) return true;
-  
+  // Only filter if we have a verified low score OR tiny value
+  // Don't filter just because Jupiter API is down
+  if (tokenInfo && tokenInfo.jupiterScore < 10) return true;
+  if (usdValue !== null && usdValue < 0.001) return true;
   return false;
 }

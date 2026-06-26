@@ -58,7 +58,7 @@ async function backfillWallet(walletId: number) {
         usdValue = realAmount * price;
       }
 
-      const isSpam = !tokenInfo || tokenInfo.jupiterScore < 20 || (usdValue !== null && usdValue < 0.01);
+  const isSpam = false; // Jupiter API is dead, skip spam detection for now
 
       let counterpartySymbol = null;
       if (counterpartyTransfer) {
