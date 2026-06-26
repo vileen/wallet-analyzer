@@ -2,6 +2,7 @@ import cron from 'node-cron';
 import { query } from './db';
 import { fetchTransactions, classifyTransaction, ParsedTransaction } from './solana';
 import { resolveToken } from './tokenResolver';
+import { getTokenPrice, calculateUsdValue } from './priceResolver';
 
 let isRunning = false;
 
@@ -82,6 +83,14 @@ async function processTransaction(
   // Resolve token info using our resolver (Helius + hardcoded + cache)
   const tokenInfo = await resolveToken(primaryTransfer.mint);
 
+  // Calculate USD value
+  let usdValue: number | null = null;
+  const price = await getTokenPrice(primaryTransfer.mint);
+  if (price !== null) {
+    const decimals = tokenInfo?.decimals || 0;
+    usdValue = calculateUsdValue(primaryTransfer.amount, decimals, price);
+  }
+
   // Get counterparty info
   let counterpartySymbol = null;
   let counterpartyName = null;
@@ -106,7 +115,7 @@ async function processTransaction(
       tokenInfo?.symbol || 'Unknown',
       tokenInfo?.name || 'Unknown',
       primaryTransfer.amount,
-      null, // usd_value - skip for now
+      usdValue,
       counterpartyTransfer?.mint || null,
       counterpartySymbol,
       counterpartyTransfer?.amount || null,
