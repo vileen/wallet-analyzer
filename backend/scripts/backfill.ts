@@ -1,6 +1,6 @@
 import { query } from '../src/db';
 import { fetchTransactions, classifyTransaction } from '../src/solana';
-import { getTokenInfo, getTokenPrice } from '../src/jupiter';
+import { resolveToken } from '../src/tokenResolver';
 
 const JUNE_1_2026 = new Date('2026-06-01T00:00:00Z').getTime();
 
@@ -49,21 +49,15 @@ async function backfillWallet(walletId: number) {
       if (!classification || !classification.primaryTransfer) continue;
 
       const { type, primaryTransfer, counterpartyTransfer } = classification;
-      const tokenInfo = await getTokenInfo(primaryTransfer.mint);
-      
-      let usdValue: number | null = null;
-      const price = await getTokenPrice(primaryTransfer.mint);
-      if (price && tokenInfo) {
-        const realAmount = primaryTransfer.amount / Math.pow(10, tokenInfo.decimals);
-        usdValue = realAmount * price;
-      }
-
-  const isSpam = false; // Jupiter API is dead, skip spam detection for now
+      const tokenInfo = await resolveToken(primaryTransfer.mint);
+      const isSpam = false;
 
       let counterpartySymbol = null;
+      let counterpartyName = null;
       if (counterpartyTransfer) {
-        const cpInfo = await getTokenInfo(counterpartyTransfer.mint);
+        const cpInfo = await resolveToken(counterpartyTransfer.mint);
         counterpartySymbol = cpInfo?.symbol || null;
+        counterpartyName = cpInfo?.name || null;
       }
 
       await query(
@@ -71,11 +65,12 @@ async function backfillWallet(walletId: number) {
          (signature, wallet_id, type, token_mint, token_symbol, token_name, amount, usd_value, 
           counterparty_mint, counterparty_symbol, counterparty_amount, from_address, to_address, 
           timestamp, slot, is_spam, raw_json)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+         ON CONFLICT (signature) DO NOTHING`,
         [
           tx.signature, walletId, type,
           primaryTransfer.mint, tokenInfo?.symbol || 'Unknown', tokenInfo?.name || 'Unknown',
-          primaryTransfer.amount, usdValue,
+          primaryTransfer.amount, null,
           counterpartyTransfer?.mint || null, counterpartySymbol, counterpartyTransfer?.amount || null,
           primaryTransfer.from, primaryTransfer.to,
           new Date(tx.timestamp), tx.slot, isSpam, JSON.stringify(tx.raw),

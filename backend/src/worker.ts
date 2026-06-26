@@ -1,7 +1,7 @@
 import cron from 'node-cron';
 import { query } from './db';
 import { fetchTransactions, classifyTransaction, ParsedTransaction } from './solana';
-import { getTokenInfo, getTokenPrice } from './jupiter';
+import { resolveToken } from './tokenResolver';
 
 let isRunning = false;
 
@@ -73,37 +73,22 @@ async function processTransaction(
   walletAddress: string,
   trackedAddresses: Set<string>
 ): Promise<void> {
-  // Skip if already exists
-  const existing = await query('SELECT 1 FROM transactions WHERE signature = $1', [tx.signature]);
-  if (existing.rows.length > 0) return;
-
   const classification = classifyTransaction(tx, walletAddress, trackedAddresses);
   if (!classification) return;
 
   const { type, primaryTransfer, counterpartyTransfer } = classification;
   if (!primaryTransfer) return;
 
-  // Get token info
-  const tokenInfo = await getTokenInfo(primaryTransfer.mint);
-  
-  // Spam filtering
-  let usdValue: number | null = null;
-  const price = await getTokenPrice(primaryTransfer.mint);
-  if (price && tokenInfo) {
-    const realAmount = primaryTransfer.amount / Math.pow(10, tokenInfo.decimals);
-    usdValue = realAmount * price;
-  }
-
-  const isSpam = false; // Jupiter API is dead, disable spam detection
-  if (isSpam) {
-    console.log(`[Worker] Skipping spam tx: ${tx.signature}`);
-  }
+  // Resolve token info using our resolver (Helius + hardcoded + cache)
+  const tokenInfo = await resolveToken(primaryTransfer.mint);
 
   // Get counterparty info
   let counterpartySymbol = null;
+  let counterpartyName = null;
   if (counterpartyTransfer) {
-    const cpInfo = await getTokenInfo(counterpartyTransfer.mint);
+    const cpInfo = await resolveToken(counterpartyTransfer.mint);
     counterpartySymbol = cpInfo?.symbol || null;
+    counterpartyName = cpInfo?.name || null;
   }
 
   await query(
@@ -111,7 +96,8 @@ async function processTransaction(
      (signature, wallet_id, type, token_mint, token_symbol, token_name, amount, usd_value, 
       counterparty_mint, counterparty_symbol, counterparty_amount, from_address, to_address, 
       timestamp, slot, is_spam, raw_json)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+     ON CONFLICT (signature) DO NOTHING`,
     [
       tx.signature,
       walletId,
@@ -120,7 +106,7 @@ async function processTransaction(
       tokenInfo?.symbol || 'Unknown',
       tokenInfo?.name || 'Unknown',
       primaryTransfer.amount,
-      usdValue,
+      null, // usd_value - skip for now
       counterpartyTransfer?.mint || null,
       counterpartySymbol,
       counterpartyTransfer?.amount || null,
@@ -128,16 +114,8 @@ async function processTransaction(
       primaryTransfer.to,
       new Date(tx.timestamp),
       tx.slot,
-      isSpam,
+      false,
       JSON.stringify(tx.raw),
     ]
   );
-}
-
-function shouldFilterAsSpam(tokenInfo: any, usdValue: number | null): boolean {
-  // Only filter if we have a verified low score OR tiny value
-  // Don't filter just because Jupiter API is down
-  if (tokenInfo && tokenInfo.jupiterScore < 10) return true;
-  if (usdValue !== null && usdValue < 0.001) return true;
-  return false;
 }
