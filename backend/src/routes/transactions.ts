@@ -27,7 +27,7 @@ router.get('/', async (req: AuthRequest, res) => {
   }
 
   if (show_spam !== 'true') {
-    sql += ` AND t.is_spam = false`;
+    sql += ` AND t.is_spam = false AND (t.usd_value IS NULL OR t.usd_value >= 1)`;
   }
 
   sql += ` ORDER BY t.timestamp DESC LIMIT $${paramIdx++} OFFSET $${paramIdx++}`;
@@ -46,7 +46,7 @@ router.get('/stats', async (req: AuthRequest, res) => {
       COUNT(*) as count,
       COALESCE(SUM(usd_value), 0) as total_usd
     FROM transactions
-    WHERE is_spam = false
+    WHERE is_spam = false AND (usd_value IS NULL OR usd_value >= 1)
   `;
   const params: any[] = [];
   

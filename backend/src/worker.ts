@@ -100,6 +100,9 @@ async function processTransaction(
     counterpartyName = cpInfo?.name || null;
   }
 
+  // Mark as spam if USD value is below $1
+  const isSpam = usdValue !== null && usdValue < 1;
+
   await query(
     `INSERT INTO transactions 
      (signature, wallet_id, type, token_mint, token_symbol, token_name, amount, usd_value, 
@@ -123,7 +126,7 @@ async function processTransaction(
       primaryTransfer.to,
       new Date(tx.timestamp),
       tx.slot,
-      false,
+      isSpam,
       JSON.stringify(tx.raw),
     ]
   );
