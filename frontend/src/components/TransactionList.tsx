@@ -16,6 +16,45 @@ function SolscanLink({ type, value, children, style: customStyle }: { type: 'acc
   );
 }
 
+function CopyButton({ value }: { value: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      const textarea = document.createElement('textarea');
+      textarea.value = value;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    }
+  };
+
+  return (
+    <span
+      onClick={handleCopy}
+      title={copied ? 'Copied!' : 'Copy'}
+      style={{
+        cursor: 'pointer',
+        marginLeft: '0.25rem',
+        fontSize: '0.7rem',
+        color: copied ? '#4caf50' : '#555',
+        transition: 'color 0.2s',
+        userSelect: 'none',
+      }}
+    >
+      {copied ? '✓' : '⎘'}
+    </span>
+  );
+}
+
 interface Transaction {
   id: number;
   signature: string;
@@ -141,9 +180,12 @@ export default function TransactionList({ walletId }: { walletId: number | null 
                   <div style={{ fontWeight: 500, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     <span>{formatAmount(tx.amount)}</span>
                     {tx.token_mint ? (
-                      <SolscanLink type="token" value={tx.token_mint}>
-                        {tx.token_symbol}
-                      </SolscanLink>
+                      <>
+                        <SolscanLink type="token" value={tx.token_mint}>
+                          {tx.token_symbol}
+                        </SolscanLink>
+                        <CopyButton value={tx.token_mint} />
+                      </>
                     ) : (
                       tx.token_symbol
                     )}
@@ -160,15 +202,18 @@ export default function TransactionList({ walletId }: { walletId: number | null 
                     <SolscanLink type="account" value={tx.from_address}>
                       {formatAddress(tx.from_address)}
                     </SolscanLink>
+                    <CopyButton value={tx.from_address} />
                     <span>→</span>
                     <SolscanLink type="account" value={tx.to_address}>
                       {formatAddress(tx.to_address)}
                     </SolscanLink>
+                    <CopyButton value={tx.to_address} />
                   </div>
-                  <div style={{ fontSize: '0.75rem', marginTop: '0.25rem' }}>
+                  <div style={{ fontSize: '0.75rem', marginTop: '0.25rem', display: 'flex', alignItems: 'center' }}>
                     <SolscanLink type="tx" value={tx.signature} style={{ fontSize: '0.7rem', color: '#555' }}>
                       {tx.signature.slice(0, 16)}...{tx.signature.slice(-8)}
                     </SolscanLink>
+                    <CopyButton value={tx.signature} />
                   </div>
                 </div>
 
