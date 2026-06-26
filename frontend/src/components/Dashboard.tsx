@@ -22,13 +22,10 @@ export default function Dashboard({ onLogout }: { onLogout: () => void }) {
   const [selectedWallet, setSelectedWallet] = useState<number | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
-  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const doRefresh = async () => {
-    setIsRefreshing(true);
+  const doRefresh = () => {
     setRefreshKey(k => k + 1);
     setLastUpdated(new Date());
-    setIsRefreshing(false);
   };
 
   useEffect(() => {
@@ -68,13 +65,11 @@ export default function Dashboard({ onLogout }: { onLogout: () => void }) {
           <h1 style={{ fontSize: '1.5rem', fontWeight: 600 }}>Solana Wallet Tracker</h1>
           <div style={{ fontSize: '0.75rem', color: '#666', marginTop: '0.25rem' }}>
             Last updated: {timeAgo(lastUpdated)}
-            {isRefreshing && <span style={{ marginLeft: '0.5rem', color: '#7c4dff' }}>⟳ refreshing...</span>}
           </div>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           <button
             onClick={doRefresh}
-            disabled={isRefreshing}
             style={{
               padding: '0.5rem 1rem',
               borderRadius: '6px',
@@ -85,7 +80,7 @@ export default function Dashboard({ onLogout }: { onLogout: () => void }) {
               fontSize: '0.875rem',
             }}
           >
-            {isRefreshing ? '⟳' : '↻'} Refresh
+            ↻ Refresh
           </button>
           <button
             onClick={handleLogout}
@@ -125,7 +120,7 @@ export default function Dashboard({ onLogout }: { onLogout: () => void }) {
           </div>
         </div>
 
-        <TransactionList walletId={selectedWallet} key={refreshKey} />
+        <TransactionList walletId={selectedWallet} refreshKey={refreshKey} />
       </div>
     </div>
   );

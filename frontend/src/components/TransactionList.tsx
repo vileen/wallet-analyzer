@@ -72,18 +72,39 @@ interface Transaction {
   token_mint: string;
 }
 
-export default function TransactionList({ walletId }: { walletId: number | null }) {
+export default function TransactionList({ walletId, refreshKey }: { walletId: number | null; refreshKey?: number }) {
   const [txs, setTxs] = useState<Transaction[]>([]);
   const [filter, setFilter] = useState('');
   const [showSpam, setShowSpam] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
 
+  const fetchTxs = async (silent = false) => {
+    if (!silent) setLoading(true);
+    try {
+      const data = await txApi.list({
+        wallet_id: walletId || undefined,
+        type: filter || undefined,
+        show_spam: showSpam,
+      });
+      setTxs(data);
+    } finally {
+      if (!silent) setLoading(false);
+    }
+  };
+
+  // Initial load + filter/wallet change (shows spinner)
   useEffect(() => {
-    setLoading(true);
-    txApi.list({ wallet_id: walletId || undefined, type: filter || undefined, show_spam: showSpam })
-      .then(setTxs)
-      .finally(() => setLoading(false));
+    fetchTxs(false);
+    setIsInitialLoad(false);
   }, [walletId, filter, showSpam]);
+
+  // Silent refresh from polling (no spinner, no UI shift)
+  useEffect(() => {
+    if (!isInitialLoad && refreshKey !== undefined) {
+      fetchTxs(true);
+    }
+  }, [refreshKey]);
 
   const formatAmount = (amount: string, decimals: number = 6) => {
     const num = parseFloat(amount);
