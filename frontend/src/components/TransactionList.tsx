@@ -55,6 +55,17 @@ export default function TransactionList({ walletId }: { walletId: number | null 
 
   const formatAddress = (addr: string) => addr.slice(0, 6) + '...' + addr.slice(-4);
 
+  const formatUsd = (value: string | null) => {
+    if (!value) return '-';
+    const num = parseFloat(value);
+    if (num === 0) return '$0';
+    if (num < 0.01) return '$' + num.toExponential(2);
+    if (num < 1) return '$' + num.toFixed(4);
+    if (num < 1000) return '$' + num.toFixed(2);
+    if (num < 1000000) return '$' + (num / 1000).toFixed(1) + 'K';
+    return '$' + (num / 1000000).toFixed(1) + 'M';
+  };
+
   const getTypeStyle = (type: string) => {
     switch (type) {
       case 'buy': return { color: '#4caf50', bg: '#1b5e20' };
@@ -162,7 +173,7 @@ export default function TransactionList({ walletId }: { walletId: number | null 
                 </div>
 
                 <div style={{ textAlign: 'right', fontSize: '0.875rem' }}>
-                  {tx.usd_value ? `$${parseFloat(tx.usd_value).toFixed(2)}` : '-'}
+                  {formatUsd(tx.usd_value)}
                 </div>
 
                 <div style={{ textAlign: 'right', fontSize: '0.75rem', color: '#888' }}>
