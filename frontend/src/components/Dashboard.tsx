@@ -36,11 +36,11 @@ export default function Dashboard({ onLogout }: { onLogout: () => void }) {
     txApi.stats(selectedWallet || undefined).then(setStats);
   }, [selectedWallet, refreshKey]);
 
-  // Auto-poll every 30 seconds
+  // Auto-poll every 5 minutes (300s)
   useEffect(() => {
     const interval = setInterval(() => {
       doRefresh();
-    }, 30000);
+    }, 300000);
     return () => clearInterval(interval);
   }, [selectedWallet]);
 

@@ -7,8 +7,8 @@ import { getTokenPrice, calculateUsdValue } from './priceResolver';
 let isRunning = false;
 
 export function startWorker(): void {
-  // Run every minute
-  cron.schedule('* * * * *', async () => {
+  // Run every 5 minutes
+  cron.schedule('*/5 * * * *', async () => {
     if (isRunning) {
       console.log('[Worker] Previous run still in progress, skipping...');
       return;
