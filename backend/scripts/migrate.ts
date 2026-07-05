@@ -19,7 +19,7 @@ async function migrate() {
       id SERIAL PRIMARY KEY,
       signature VARCHAR(100) UNIQUE NOT NULL,
       wallet_id INTEGER REFERENCES wallets(id) ON DELETE CASCADE,
-      type VARCHAR(20) CHECK (type IN ('buy', 'sell', 'transfer_in', 'transfer_out', 'internal_transfer')),
+      type VARCHAR(20) CHECK (type IN ('buy', 'sell', 'transfer_in', 'transfer_out', 'internal_transfer', 'liquidity_add', 'liquidity_remove')),
       token_mint VARCHAR(44),
       token_symbol VARCHAR(50),
       token_name VARCHAR(255),
