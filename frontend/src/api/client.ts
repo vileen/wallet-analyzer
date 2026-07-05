@@ -11,6 +11,8 @@ async function api(path: string, options: RequestInit = {}) {
   });
 
   if (res.status === 401) {
+    // Token expired or invalid — reload to trigger auth check and redirect to login
+    window.location.reload();
     throw new Error('Unauthorized');
   }
 

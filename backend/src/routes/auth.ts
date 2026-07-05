@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { generateToken, verifyPassword, setAuthCookie } from '../auth';
+import { generateToken, verifyPassword, setAuthCookie, authMiddleware } from '../auth';
 
 const router = Router();
 
@@ -21,8 +21,7 @@ router.post('/logout', (req, res) => {
   res.json({ success: true });
 });
 
-router.get('/check', (req, res) => {
-  // Middleware will handle auth, if we get here we're good
+router.get('/check', authMiddleware, (req, res) => {
   res.json({ authenticated: true });
 });
 

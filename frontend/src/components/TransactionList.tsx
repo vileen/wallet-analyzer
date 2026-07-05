@@ -1,7 +1,22 @@
 import { useState, useEffect } from 'react';
 import { transactions as txApi } from '../api/client';
 
-function SolscanLink({ type, value, children, style: customStyle }: { type: 'account' | 'tx' | 'token'; value: string; children: React.ReactNode; style?: React.CSSProperties }) {
+function AxiomLink({ mint, children, style: customStyle }: { mint: string; children: React.ReactNode; style?: React.CSSProperties }) {
+  const url = `https://axiom.trade/meme/${mint}?chain=sol`;
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      style={{ color: '#7c4dff', textDecoration: 'none', ...customStyle }}
+      onClick={e => e.stopPropagation()}
+    >
+      {children}
+    </a>
+  );
+}
+
+function SolscanLink({ type, value, children, style: customStyle }: { type: 'account' | 'tx'; value: string; children: React.ReactNode; style?: React.CSSProperties }) {
   const url = `https://solscan.io/${type}/${value}`;
   return (
     <a
@@ -202,9 +217,9 @@ export default function TransactionList({ walletId, refreshKey }: { walletId: nu
                     <span>{formatAmount(tx.amount)}</span>
                     {tx.token_mint ? (
                       <>
-                        <SolscanLink type="token" value={tx.token_mint}>
+                        <AxiomLink mint={tx.token_mint}>
                           {tx.token_symbol}
-                        </SolscanLink>
+                        </AxiomLink>
                         <CopyButton value={tx.token_mint} />
                       </>
                     ) : (
