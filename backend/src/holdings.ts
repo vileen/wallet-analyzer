@@ -107,6 +107,8 @@ async function fetchTokenAccounts(address: string): Promise<TokenBalance[]> {
 }
 
 async function fetchTokenPrice(mint: string): Promise<number | null> {
+  const JUPITER_API_KEY = 'jup_e8eaae5f2845c5e6ad1182dc8dc9dd24d07403ebb821199cd0156fe157599d85';
+
   // 1. Try DexScreener - filter for pairs where mint is the BASE token
   try {
     const response = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`);
@@ -130,9 +132,11 @@ async function fetchTokenPrice(mint: string): Promise<number | null> {
     // ignore
   }
 
-  // 2. Fallback to Jupiter Price API v3
+  // 2. Fallback to Jupiter Price API v3 (with API key for higher rate limits)
   try {
-    const response = await fetch(`https://api.jup.ag/price/v3?ids=${mint}`);
+    const response = await fetch(`https://api.jup.ag/price/v3?ids=${mint}`, {
+      headers: { 'x-api-key': JUPITER_API_KEY },
+    });
     if (response.ok) {
       const data = await response.json() as any;
       const tokenData = data[mint];
