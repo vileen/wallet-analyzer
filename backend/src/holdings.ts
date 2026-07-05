@@ -77,33 +77,45 @@ async function fetchSolBalance(address: string): Promise<number> {
 }
 
 async function fetchTokenAccounts(address: string): Promise<TokenBalance[]> {
-  const response = await fetch(SOLANA_RPC, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      id: 1,
-      method: 'getTokenAccountsByOwner',
-      params: [
-        address,
-        { programId: 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA' },
-        { encoding: 'jsonParsed' },
-      ],
-    }),
-  });
+  const SPL_TOKEN_PROGRAM = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
+  const TOKEN_2022_PROGRAM = 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb';
 
-  const data = await response.json() as any;
-  if (!data.result?.value) return [];
+  const fetchForProgram = async (programId: string): Promise<TokenBalance[]> => {
+    const response = await fetch(SOLANA_RPC, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'getTokenAccountsByOwner',
+        params: [
+          address,
+          { programId },
+          { encoding: 'jsonParsed' },
+        ],
+      }),
+    });
 
-  return data.result.value.map((item: any) => {
-    const info = item.account.data.parsed.info;
-    return {
-      mint: info.mint,
-      amount: info.tokenAmount.amount,
-      decimals: info.tokenAmount.decimals,
-      uiAmount: info.tokenAmount.uiAmount ?? 0,
-    };
-  });
+    const data = await response.json() as any;
+    if (!data.result?.value) return [];
+
+    return data.result.value.map((item: any) => {
+      const info = item.account.data.parsed.info;
+      return {
+        mint: info.mint,
+        amount: info.tokenAmount.amount,
+        decimals: info.tokenAmount.decimals,
+        uiAmount: info.tokenAmount.uiAmount ?? 0,
+      };
+    });
+  };
+
+  const [splTokens, token2022Tokens] = await Promise.all([
+    fetchForProgram(SPL_TOKEN_PROGRAM),
+    fetchForProgram(TOKEN_2022_PROGRAM),
+  ]);
+
+  return [...splTokens, ...token2022Tokens];
 }
 
 async function fetchTokenPrice(mint: string): Promise<number | null> {
