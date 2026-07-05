@@ -152,6 +152,25 @@ export default function TransactionList({ walletId, refreshKey }: { walletId: nu
     }
   };
 
+  // Group by date (descending)
+  const groupedByDate = txs.reduce((groups, tx) => {
+    const date = new Date(tx.timestamp).toLocaleDateString('en-US', {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+    if (!groups[date]) groups[date] = [];
+    groups[date].push(tx);
+    return groups;
+  }, {} as Record<string, Transaction[]>);
+
+  const sortedDates = Object.keys(groupedByDate).sort(
+    (a, b) =>
+      new Date(groupedByDate[b][0].timestamp).getTime() -
+      new Date(groupedByDate[a][0].timestamp).getTime()
+  );
+
   return (
     <div>
       <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -183,88 +202,132 @@ export default function TransactionList({ walletId, refreshKey }: { walletId: nu
       ) : txs.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '2rem', color: '#666' }}>No transactions found</div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-          {txs.map(tx => {
-            const style = getTypeStyle(tx.type);
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          {sortedDates.map(date => {
+            const dateTxs = groupedByDate[date];
+            const buyTotal = dateTxs
+              .filter(t => t.type === 'buy')
+              .reduce((s, t) => s + (parseFloat(t.usd_value || '0')), 0);
+            const sellTotal = dateTxs
+              .filter(t => t.type === 'sell')
+              .reduce((s, t) => s + (parseFloat(t.usd_value || '0')), 0);
+            const pnl = sellTotal - buyTotal;
+
             return (
-              <div
-                key={tx.id}
-                style={{
-                  background: '#1a1a1a',
-                  borderRadius: '8px',
-                  padding: '1rem',
-                  display: 'grid',
-                  gridTemplateColumns: '100px 1fr 150px 120px 100px',
-                  gap: '1rem',
+              <div key={date}>
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
                   alignItems: 'center',
-                }}
-              >
-                <span style={{
-                  padding: '0.25rem 0.5rem',
-                  borderRadius: '4px',
-                  fontSize: '0.75rem',
-                  fontWeight: 600,
-                  textTransform: 'uppercase',
-                  background: style.bg,
-                  color: style.color,
-                  textAlign: 'center',
+                  padding: '0.75rem 1rem',
+                  background: '#2a2a2a',
+                  borderRadius: '8px',
+                  marginBottom: '0.5rem',
                 }}>
-                  {tx.type.replace('_', ' ')}
-                </span>
-
-                <div style={{ overflow: 'hidden' }}>
-                  <div style={{ fontWeight: 500, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <span>{formatAmount(tx.amount)}</span>
-                    {tx.token_mint ? (
-                      <>
-                        <AxiomLink mint={tx.token_mint}>
-                          {tx.token_symbol}
-                        </AxiomLink>
-                        <CopyButton value={tx.token_mint} />
-                      </>
-                    ) : (
-                      tx.token_symbol
+                  <span style={{ fontWeight: 600, fontSize: '1rem' }}>{date}</span>
+                  <span style={{ fontSize: '0.875rem', color: '#888' }}>
+                    {dateTxs.length} txs
+                    {buyTotal > 0 && (
+                      <span style={{ color: '#f44336', marginLeft: '0.75rem' }}>
+                        -${buyTotal.toFixed(2)}
+                      </span>
                     )}
-                    {tx.token_name && tx.token_name !== tx.token_symbol && (
-                      <span style={{ color: '#666', fontSize: '0.875rem' }}>({tx.token_name})</span>
+                    {sellTotal > 0 && (
+                      <span style={{ color: '#4caf50', marginLeft: '0.75rem' }}>
+                        +${sellTotal.toFixed(2)}
+                      </span>
                     )}
-                  </div>
-                  {tx.counterparty_symbol && (
-                    <div style={{ fontSize: '0.75rem', color: '#888', marginTop: '0.25rem' }}>
-                      for {tx.counterparty_amount ? formatAmount(tx.counterparty_amount) : '?'} {tx.counterparty_symbol}
-                    </div>
-                  )}
-                  <div style={{ fontSize: '0.75rem', color: '#666', marginTop: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <SolscanLink type="account" value={tx.from_address}>
-                      {formatAddress(tx.from_address)}
-                    </SolscanLink>
-                    <CopyButton value={tx.from_address} />
-                    <span>→</span>
-                    <SolscanLink type="account" value={tx.to_address}>
-                      {formatAddress(tx.to_address)}
-                    </SolscanLink>
-                    <CopyButton value={tx.to_address} />
-                  </div>
-                  <div style={{ fontSize: '0.75rem', marginTop: '0.25rem', display: 'flex', alignItems: 'center' }}>
-                    <SolscanLink type="tx" value={tx.signature} style={{ fontSize: '0.7rem', color: '#555' }}>
-                      {tx.signature.slice(0, 16)}...{tx.signature.slice(-8)}
-                    </SolscanLink>
-                    <CopyButton value={tx.signature} />
-                  </div>
+                    {pnl !== 0 && (
+                      <span style={{ color: pnl >= 0 ? '#4caf50' : '#f44336', marginLeft: '0.75rem', fontWeight: 600 }}>
+                        PnL: {pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}
+                      </span>
+                    )}
+                  </span>
                 </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  {dateTxs.map(tx => {
+                    const style = getTypeStyle(tx.type);
+                    return (
+                      <div
+                        key={tx.id}
+                        style={{
+                          background: '#1a1a1a',
+                          borderRadius: '8px',
+                          padding: '1rem',
+                          display: 'grid',
+                          gridTemplateColumns: '100px 1fr 150px 120px 100px',
+                          gap: '1rem',
+                          alignItems: 'center',
+                        }}
+                      >
+                        <span style={{
+                          padding: '0.25rem 0.5rem',
+                          borderRadius: '4px',
+                          fontSize: '0.75rem',
+                          fontWeight: 600,
+                          textTransform: 'uppercase',
+                          background: style.bg,
+                          color: style.color,
+                          textAlign: 'center',
+                        }}>
+                          {tx.type.replace('_', ' ')}
+                        </span>
 
-                <div style={{ textAlign: 'right', fontSize: '0.875rem' }}>
-                  {formatUsd(tx.usd_value)}
-                </div>
+                        <div style={{ overflow: 'hidden' }}>
+                          <div style={{ fontWeight: 500, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <span>{formatAmount(tx.amount)}</span>
+                            {tx.token_mint ? (
+                              <>
+                                <AxiomLink mint={tx.token_mint}>
+                                  {tx.token_symbol}
+                                </AxiomLink>
+                                <CopyButton value={tx.token_mint} />
+                              </>
+                            ) : (
+                              tx.token_symbol
+                            )}
+                            {tx.token_name && tx.token_name !== tx.token_symbol && (
+                              <span style={{ color: '#666', fontSize: '0.875rem' }}>({tx.token_name})</span>
+                            )}
+                          </div>
+                          {tx.counterparty_symbol && (
+                            <div style={{ fontSize: '0.75rem', color: '#888', marginTop: '0.25rem' }}>
+                              for {tx.counterparty_amount ? formatAmount(tx.counterparty_amount) : '?'} {tx.counterparty_symbol}
+                            </div>
+                          )}
+                          <div style={{ fontSize: '0.75rem', color: '#666', marginTop: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <SolscanLink type="account" value={tx.from_address}>
+                              {formatAddress(tx.from_address)}
+                            </SolscanLink>
+                            <CopyButton value={tx.from_address} />
+                            <span>→</span>
+                            <SolscanLink type="account" value={tx.to_address}>
+                              {formatAddress(tx.to_address)}
+                            </SolscanLink>
+                            <CopyButton value={tx.to_address} />
+                          </div>
+                          <div style={{ fontSize: '0.75rem', marginTop: '0.25rem', display: 'flex', alignItems: 'center' }}>
+                            <SolscanLink type="tx" value={tx.signature} style={{ fontSize: '0.7rem', color: '#555' }}>
+                              {tx.signature.slice(0, 16)}...{tx.signature.slice(-8)}
+                            </SolscanLink>
+                            <CopyButton value={tx.signature} />
+                          </div>
+                        </div>
 
-                <div style={{ textAlign: 'right', fontSize: '0.75rem', color: '#888' }}>
-                  {tx.wallet_label || 'Unknown'}
-                </div>
+                        <div style={{ textAlign: 'right', fontSize: '0.875rem' }}>
+                          {formatUsd(tx.usd_value)}
+                        </div>
 
-                <div style={{ textAlign: 'right', fontSize: '0.75rem', color: '#666' }}>
-                  {new Date(tx.timestamp).toLocaleDateString()}
-                  <br />
-                  {new Date(tx.timestamp).toLocaleTimeString()}
+                        <div style={{ textAlign: 'right', fontSize: '0.75rem', color: '#888' }}>
+                          {tx.wallet_label || 'Unknown'}
+                        </div>
+
+                        <div style={{ textAlign: 'right', fontSize: '0.75rem', color: '#666' }}>
+                          {new Date(tx.timestamp).toLocaleTimeString()}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             );
