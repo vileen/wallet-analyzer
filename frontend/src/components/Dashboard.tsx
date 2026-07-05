@@ -66,7 +66,7 @@ export default function Dashboard({ onLogout }: { onLogout: () => void }) {
         <div>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 600 }}>Solana Wallet Tracker</h1>
           <div style={{ fontSize: '0.75rem', color: '#666', marginTop: '0.25rem' }}>
-            Last updated: {timeAgo(lastUpdated)}
+            v1.1 — Wallet Analysis Enabled | Last updated: {timeAgo(lastUpdated)}
           </div>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
