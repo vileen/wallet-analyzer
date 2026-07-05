@@ -31,11 +31,25 @@ export default function Dashboard({ onLogout }: { onLogout: () => void }) {
   };
 
   useEffect(() => {
-    walletsApi.list().then(setWallets);
+    walletsApi.list()
+      .then(setWallets)
+      .catch(err => {
+        console.error('[Dashboard] Failed to load wallets:', err);
+        if (err.message === 'Unauthorized') {
+          onLogout();
+          return;
+        }
+        setWallets([]);
+      });
   }, [refreshKey]);
 
   useEffect(() => {
-    txApi.stats(selectedWallet || undefined).then(setStats);
+    txApi.stats(selectedWallet || undefined)
+      .then(setStats)
+      .catch(err => {
+        console.error('[Dashboard] Failed to load stats:', err);
+        setStats([]);
+      });
   }, [selectedWallet, refreshKey]);
 
   // Auto-poll every 5 minutes (300s)
