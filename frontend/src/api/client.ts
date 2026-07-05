@@ -1,5 +1,7 @@
 const API_URL = import.meta.env.VITE_API_URL || 'https://solana-tracker.vileen.pl';
 
+// Auto-logout on 401 — reload triggers auth check in App.tsx
+
 async function api(path: string, options: RequestInit = {}) {
   const res = await fetch(`${API_URL}${path}`, {
     ...options,
