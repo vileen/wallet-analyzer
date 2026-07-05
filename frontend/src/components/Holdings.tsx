@@ -60,24 +60,28 @@ export default function Holdings({ walletId }: { walletId: number | null }) {
       .finally(() => setLoading(false));
   }, [walletId]);
 
+  const displayHoldings = useMemo(() => {
+    return holdings.filter(h => h.mint === 'So11111111111111111111111111111111111111112' || (h.value_usd ?? 0) >= 1);
+  }, [holdings]);
+
   const filteredHoldings = useMemo(() => {
-    if (!searchTerm) return holdings;
+    if (!searchTerm) return displayHoldings;
     const term = searchTerm.toLowerCase();
-    return holdings.filter(h =>
+    return displayHoldings.filter(h =>
       h.symbol.toLowerCase().includes(term) ||
       h.name.toLowerCase().includes(term) ||
       h.mint.toLowerCase().includes(term)
     );
-  }, [holdings, searchTerm]);
+  }, [displayHoldings, searchTerm]);
 
-  const totalValue = holdings.reduce((sum, h) => sum + (h.value_usd ?? 0), 0);
-  const solHolding = holdings.find(h => h.mint === 'So11111111111111111111111111111111111111112');
-  const tokenHoldings = holdings.filter(h => h.mint !== 'So11111111111111111111111111111111111111112');
+  const totalValue = displayHoldings.reduce((sum, h) => sum + (h.value_usd ?? 0), 0);
+  const solHolding = displayHoldings.find(h => h.mint === 'So11111111111111111111111111111111111111112');
+  const tokenHoldings = displayHoldings.filter(h => h.mint !== 'So11111111111111111111111111111111111111112');
   const tokenCount = tokenHoldings.length;
   const tokensWithValue = tokenHoldings.filter(h => (h.value_usd ?? 0) > 0).length;
 
   // Top 5 holdings for allocation bar
-  const topHoldings = [...holdings]
+  const topHoldings = [...displayHoldings]
     .filter(h => (h.value_usd ?? 0) > 0)
     .sort((a, b) => (b.value_usd ?? 0) - (a.value_usd ?? 0))
     .slice(0, 5);
@@ -135,6 +139,9 @@ export default function Holdings({ walletId }: { walletId: number | null }) {
       </div>
 
       {/* Allocation Bar */}
+      <div style={{ fontSize: '0.75rem', color: '#666', marginBottom: '0.5rem' }}>
+        Showing {displayHoldings.length} of {holdings.length} tokens (skipping sub-$1)
+      </div>
       {topHoldings.length > 0 && (
         <div style={{ background: '#1a1a1a', borderRadius: '8px', padding: '1rem', marginBottom: '1rem' }}>
           <div style={{ fontSize: '0.875rem', color: '#888', marginBottom: '0.5rem' }}>Top Holdings</div>
