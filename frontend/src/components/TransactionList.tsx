@@ -85,6 +85,7 @@ interface Transaction {
   timestamp: string;
   wallet_label: string | null;
   token_mint: string;
+  token_pool_address?: string;
 }
 
 export default function TransactionList({ walletId, refreshKey }: { walletId: number | null; refreshKey?: number }) {
@@ -278,7 +279,7 @@ export default function TransactionList({ walletId, refreshKey }: { walletId: nu
                             <span>{formatAmount(tx.amount)}</span>
                             {tx.token_mint ? (
                               <>
-                                <AxiomLink mint={tx.token_mint}>
+                                <AxiomLink mint={tx.token_pool_address || tx.token_mint}>
                                   {tx.token_symbol}
                                 </AxiomLink>
                                 <CopyButton value={tx.token_mint} />

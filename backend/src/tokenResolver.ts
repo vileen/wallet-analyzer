@@ -1,10 +1,14 @@
 import { query } from './db';
+import { PublicKey } from '@solana/web3.js';
 
 const HELIUS_API_KEY = process.env.HELIUS_API_KEY;
 const HELIUS_BASE = 'https://api.helius.xyz/v0';
 
+const PUMP_FUN_PROGRAM = new PublicKey('6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P');
+const BONDING_CURVE_SEED = Buffer.from('bonding_curve');
+
 // Hardcoded known tokens - covers 99% of transactions
-const KNOWN_TOKENS: Record<string, { symbol: string; name: string; decimals: number }> = {
+const KNOWN_TOKENS: Record<string, { symbol: string; name: string; decimals: number; pool_address?: string }> = {
   'So11111111111111111111111111111111111111112': { symbol: 'SOL', name: 'Wrapped SOL', decimals: 9 },
   'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v': { symbol: 'USDC', name: 'USD Coin', decimals: 6 },
   'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB': { symbol: 'USDT', name: 'Tether USD', decimals: 6 },
@@ -23,6 +27,14 @@ interface TokenInfo {
   symbol: string;
   name: string;
   decimals: number;
+  pool_address?: string;
+}
+
+interface DexScreenerPair {
+  chainId: string;
+  dexId: string;
+  pairAddress: string;
+  baseToken: { address: string; name: string; symbol: string };
 }
 
 export async function resolveToken(mint: string): Promise<TokenInfo | null> {
@@ -34,51 +46,69 @@ export async function resolveToken(mint: string): Promise<TokenInfo | null> {
   }
 
   // 2. Check database cache (but not if it's UNKNOWN or PUMP - those are likely bad data)
-  const cached = await query('SELECT symbol, name, decimals FROM tokens WHERE mint = $1', [mint]);
+  const cached = await query('SELECT symbol, name, decimals, pool_address FROM tokens WHERE mint = $1', [mint]);
   if (cached.rows.length > 0 && cached.rows[0].symbol && !['UNKNOWN', 'PUMP'].includes(cached.rows[0].symbol)) {
     return {
       symbol: cached.rows[0].symbol,
       name: cached.rows[0].name,
       decimals: cached.rows[0].decimals || 0,
+      pool_address: cached.rows[0].pool_address || undefined,
     };
   }
 
-  // 3. Try DexScreener for token metadata (most reliable for Solana)
-  const dexInfo = await fetchDexScreenerTokenInfo(mint);
-  if (dexInfo) {
-    await cacheToken(mint, dexInfo.symbol, dexInfo.name, dexInfo.decimals);
-    return dexInfo;
+  // 3. Try DexScreener for token metadata + pool info
+  const dexResult = await fetchDexScreenerTokenInfo(mint);
+  if (dexResult) {
+    await cacheToken(mint, dexResult.symbol, dexResult.name, dexResult.decimals, dexResult.pool_address);
+    return dexResult;
   }
 
   // 4. Try Helius API
   const heliusInfo = await fetchHeliusTokenInfo(mint);
   if (heliusInfo) {
-    await cacheToken(mint, heliusInfo.symbol, heliusInfo.name, heliusInfo.decimals);
-    return heliusInfo;
+    // Also try to find pool address via bonding curve for Pump.fun tokens
+    const poolAddress = derivePumpFunBondingCurve(mint);
+    await cacheToken(mint, heliusInfo.symbol, heliusInfo.name, heliusInfo.decimals, poolAddress);
+    return { ...heliusInfo, pool_address: poolAddress };
   }
 
   // 5. Try on-chain Metaplex metadata
   const onChainInfo = await fetchOnChainMetadata(mint);
   if (onChainInfo) {
-    await cacheToken(mint, onChainInfo.symbol, onChainInfo.name, onChainInfo.decimals);
-    return onChainInfo;
+    const poolAddress = derivePumpFunBondingCurve(mint);
+    await cacheToken(mint, onChainInfo.symbol, onChainInfo.name, onChainInfo.decimals, poolAddress);
+    return { ...onChainInfo, pool_address: poolAddress };
   }
 
   // 6. Fallback - mark as unknown, don't guess
-  await cacheToken(mint, 'UNKNOWN', 'Unknown Token', 0);
+  await cacheToken(mint, 'UNKNOWN', 'Unknown Token', 0, undefined);
   return { symbol: 'UNKNOWN', name: 'Unknown Token', decimals: 0 };
 }
 
-async function cacheToken(mint: string, symbol: string, name: string, decimals: number): Promise<void> {
+function derivePumpFunBondingCurve(mint: string): string | undefined {
+  try {
+    const mintPk = new PublicKey(mint);
+    const [pda] = PublicKey.findProgramAddressSync(
+      [BONDING_CURVE_SEED, mintPk.toBuffer()],
+      PUMP_FUN_PROGRAM
+    );
+    return pda.toBase58();
+  } catch {
+    return undefined;
+  }
+}
+
+async function cacheToken(mint: string, symbol: string, name: string, decimals: number, poolAddress?: string): Promise<void> {
   await query(
-    `INSERT INTO tokens (mint, symbol, name, decimals, is_verified, jupiter_score, is_spam, last_updated)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+    `INSERT INTO tokens (mint, symbol, name, decimals, pool_address, is_verified, jupiter_score, is_spam, last_updated)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
      ON CONFLICT (mint) DO UPDATE SET
        symbol = EXCLUDED.symbol,
        name = EXCLUDED.name,
        decimals = EXCLUDED.decimals,
+       pool_address = COALESCE(EXCLUDED.pool_address, tokens.pool_address),
        last_updated = NOW()`,
-    [mint, symbol, name, decimals, false, 0, false]
+    [mint, symbol, name, decimals, poolAddress || null, false, 0, false]
   );
 }
 
@@ -87,18 +117,31 @@ async function fetchDexScreenerTokenInfo(mint: string): Promise<TokenInfo | null
     const response = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`);
     if (!response.ok) return null;
 
-    const data = await response.json() as {
-      pairs?: Array<{ baseToken: { name: string; symbol: string } }>
-    };
+    const data = await response.json() as { pairs?: DexScreenerPair[] };
     if (!data.pairs || data.pairs.length === 0) return null;
 
-    const token = data.pairs[0].baseToken;
+    const pair = data.pairs[0];
+    const token = pair.baseToken;
     if (!token.symbol || !token.name) return null;
+
+    // Determine pool address:
+    // - For Pump.fun / PumpSwap: derive bonding curve (DexScreener pairAddress is the LP, not the curve)
+    // - For Raydium/Orca/Meteora: try pairAddress first
+    let poolAddress: string | undefined;
+    const dexId = pair.dexId?.toLowerCase() || '';
+
+    if (dexId.includes('pump') || dexId.includes('pumpfun') || dexId.includes('pumpswap')) {
+      poolAddress = derivePumpFunBondingCurve(mint);
+    } else {
+      // For other DEXes, pairAddress might work on Axiom
+      poolAddress = pair.pairAddress;
+    }
 
     return {
       symbol: token.symbol,
       name: token.name,
       decimals: 0, // DexScreener doesn't provide decimals
+      pool_address: poolAddress,
     };
   } catch (error) {
     return null;

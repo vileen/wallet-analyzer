@@ -8,9 +8,10 @@ router.get('/', async (req: AuthRequest, res) => {
   const { wallet_id, type, show_spam, limit = '100', offset = '0' } = req.query;
   
   let sql = `
-    SELECT t.*, w.address as wallet_address, w.label as wallet_label
+    SELECT t.*, w.address as wallet_address, w.label as wallet_label, tk.pool_address as token_pool_address
     FROM transactions t
     JOIN wallets w ON t.wallet_id = w.id
+    LEFT JOIN tokens tk ON t.token_mint = tk.mint
     WHERE 1=1
   `;
   const params: any[] = [];
