@@ -37,6 +37,7 @@ interface DexScreenerPair {
   dexId: string;
   pairAddress: string;
   baseToken: { address: string; name: string; symbol: string };
+  volume?: { h24?: number };
 }
 
 export async function resolveToken(mint: string): Promise<TokenInfo | null> {
@@ -69,7 +70,7 @@ export async function resolveToken(mint: string): Promise<TokenInfo | null> {
   const heliusInfo = await fetchHeliusTokenInfo(mint);
   if (heliusInfo) {
     // Find the correct pool address for Axiom
-    const poolAddress = await findLBUZPool(mint) || derivePumpFunBondingCurve(mint);
+    const poolAddress = await findBestPool(mint) || derivePumpFunBondingCurve(mint);
     await cacheToken(mint, heliusInfo.symbol, heliusInfo.name, heliusInfo.decimals, poolAddress);
     return { ...heliusInfo, pool_address: poolAddress };
   }
@@ -77,7 +78,7 @@ export async function resolveToken(mint: string): Promise<TokenInfo | null> {
   // 5. Try on-chain Metaplex metadata
   const onChainInfo = await fetchOnChainMetadata(mint);
   if (onChainInfo) {
-    const poolAddress = await findLBUZPool(mint) || derivePumpFunBondingCurve(mint);
+    const poolAddress = await findBestPool(mint) || derivePumpFunBondingCurve(mint);
     await cacheToken(mint, onChainInfo.symbol, onChainInfo.name, onChainInfo.decimals, poolAddress);
     return { ...onChainInfo, pool_address: poolAddress };
   }
@@ -98,6 +99,34 @@ function derivePumpFunBondingCurve(mint: string): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+// Find the best pool for a given mint.
+// Strategy: use DexScreener to find the highest-volume pool (what Axiom likely links to).
+// Fallback to LBUZ RPC scan for tokens not on DexScreener.
+export async function findBestPool(mint: string): Promise<string | undefined> {
+  // 1. Ask DexScreener for all pools — pick highest volume
+  try {
+    const response = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`);
+    if (response.ok) {
+      const data = await response.json() as { pairs?: Array<{ pairAddress: string; volume?: { h24?: number }; dexId?: string }> };
+      if (data.pairs && data.pairs.length > 0) {
+        // Sort by 24h volume descending
+        const sorted = data.pairs
+          .filter(p => p.pairAddress)
+          .sort((a, b) => (b.volume?.h24 || 0) - (a.volume?.h24 || 0));
+        const best = sorted[0];
+        if (best?.pairAddress) {
+          return best.pairAddress;
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  // 2. Fallback: LBUZ RPC scan
+  return findLBUZPool(mint);
 }
 
 // Find the LBUZKh... pool for a given mint by querying Solana RPC.
@@ -179,16 +208,14 @@ async function fetchDexScreenerTokenInfo(mint: string): Promise<TokenInfo | null
     if (!token.symbol || !token.name) return null;
 
     // Determine pool address for Axiom:
-    // - Try LBUZ program pool first (what Axiom actually uses)
-    // - Fallback to bonding curve for Pump.fun tokens
-    let poolAddress: string | undefined = await findLBUZPool(mint);
+    // - Use DexScreener's highest-volume pair (Axiom links to the dominant pool)
+    // - Fallback to LBUZ scan or bonding curve
+    const sortedPairs = data.pairs
+      .filter(p => p.pairAddress)
+      .sort((a, b) => (b.volume?.h24 || 0) - (a.volume?.h24 || 0));
+    let poolAddress: string | undefined = sortedPairs[0]?.pairAddress;
     if (!poolAddress) {
-      const dexId = pair.dexId?.toLowerCase() || '';
-      if (dexId.includes('pump') || dexId.includes('pumpfun') || dexId.includes('pumpswap')) {
-        poolAddress = derivePumpFunBondingCurve(mint);
-      } else {
-        poolAddress = pair.pairAddress;
-      }
+      poolAddress = await findBestPool(mint);
     }
 
     return {

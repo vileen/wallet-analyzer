@@ -90,6 +90,50 @@ export function classifyTransaction(
 
   if (ourTransfers.length === 0) return null;
 
+  // Check for liquidity operations by looking at raw instruction logs
+  const rawInstructions = tx.raw?.instructions || [];
+  const innerInstructions = tx.raw?.innerInstructions || [];
+  const allIxs = [...rawInstructions, ...innerInstructions.flatMap((g: any) => g.instructions || [])];
+  
+  const instructionNames = allIxs
+    .map((ix: any) => ix.parsed?.type || ix.name || '')
+    .filter(Boolean);
+  
+  const programLogs: string[] = tx.raw?.logMessages || [];
+  
+  // Detect liquidity add/remove from program logs
+  const hasLiquidityRemove = programLogs.some((log: string) => 
+    log.includes('RemoveLiquidity') || log.includes('ClosePosition')
+  );
+  const hasLiquidityAdd = programLogs.some((log: string) => 
+    log.includes('AddLiquidity') || log.includes('OpenPosition')
+  );
+  const hasClaimFee = programLogs.some((log: string) => 
+    log.includes('ClaimFee')
+  );
+  
+  if (hasLiquidityRemove || hasClaimFee) {
+    // Liquidity removal: find the non-stable token being received back
+    const receives = ourTransfers.filter(t => t.to.toLowerCase() === walletLower);
+    const nonStable = receives.find(t => !isStableCoin(t.mint));
+    return { 
+      type: 'liquidity_remove', 
+      primaryTransfer: nonStable || receives[0] || ourTransfers[0], 
+      counterpartyTransfer: null 
+    };
+  }
+  
+  if (hasLiquidityAdd) {
+    // Liquidity add: find the non-stable token being sent
+    const sends = ourTransfers.filter(t => t.from.toLowerCase() === walletLower);
+    const nonStable = sends.find(t => !isStableCoin(t.mint));
+    return { 
+      type: 'liquidity_add', 
+      primaryTransfer: nonStable || sends[0] || ourTransfers[0], 
+      counterpartyTransfer: null 
+    };
+  }
+
   // Check for internal transfer (between tracked wallets)
   if (ourTransfers.length === 1) {
     const t = ourTransfers[0];
@@ -119,17 +163,10 @@ export function classifyTransaction(
     // It's a swap. Determine if buy or sell based on which token is "more desirable"
     // Heuristic: if receiving a token and sending SOL/USDC → buy
     // If sending a token and receiving SOL/USDC → sell
-    const stableCoins = new Set([
-      'So11111111111111111111111111111111111111112', // SOL
-      'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', // USDC
-      'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB', // USDT
-    ]);
+    const nonStableReceived = receives.find(r => !isStableCoin(r.mint));
+    const nonStableSent = sends.find(s => !isStableCoin(s.mint));
 
-    // Find the "non-stable" token being received
-    const nonStableReceived = receives.find(r => !stableCoins.has(r.mint));
-    const nonStableSent = sends.find(s => !stableCoins.has(s.mint));
-
-    if (nonStableReceived && stableCoins.has(sends[0].mint)) {
+    if (nonStableReceived && isStableCoin(sends[0].mint)) {
       // Buying shitcoin with stable/SOL
       return { 
         type: 'buy', 
@@ -138,7 +175,7 @@ export function classifyTransaction(
       };
     }
 
-    if (nonStableSent && stableCoins.has(receives[0].mint)) {
+    if (nonStableSent && isStableCoin(receives[0].mint)) {
       // Selling shitcoin for stable/SOL
       return { 
         type: 'sell', 
@@ -166,4 +203,13 @@ export function classifyTransaction(
   }
 
   return null;
+}
+
+function isStableCoin(mint: string): boolean {
+  const stableCoins = new Set([
+    'So11111111111111111111111111111111111111112', // SOL
+    'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', // USDC
+    'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB', // USDT
+  ]);
+  return stableCoins.has(mint);
 }

@@ -149,6 +149,8 @@ export default function TransactionList({ walletId, refreshKey }: { walletId: nu
       case 'transfer_in': return { color: '#2196f3', bg: '#0d47a1' };
       case 'transfer_out': return { color: '#ff9800', bg: '#e65100' };
       case 'internal_transfer': return { color: '#9c27b0', bg: '#4a148c' };
+      case 'liquidity_add': return { color: '#00bcd4', bg: '#006064' };
+      case 'liquidity_remove': return { color: '#e91e63', bg: '#880e4f' };
       default: return { color: '#888', bg: '#333' };
     }
   };
@@ -186,6 +188,8 @@ export default function TransactionList({ walletId, refreshKey }: { walletId: nu
           <option value="transfer_in">Transfer In</option>
           <option value="transfer_out">Transfer Out</option>
           <option value="internal_transfer">Internal</option>
+          <option value="liquidity_add">Add Liquidity</option>
+          <option value="liquidity_remove">Remove Liquidity</option>
         </select>
 
         <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.875rem' }}>
