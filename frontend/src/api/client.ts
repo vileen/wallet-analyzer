@@ -1,6 +1,6 @@
 const API_URL = import.meta.env.VITE_API_URL || 'https://solana-tracker.vileen.pl';
 
-// Auto-logout on 401 — reload triggers auth check in App.tsx
+// 401 errors propagate to callers — auth check shows login, components handle their own
 
 async function api(path: string, options: RequestInit = {}) {
   const res = await fetch(`${API_URL}${path}`, {
@@ -13,8 +13,7 @@ async function api(path: string, options: RequestInit = {}) {
   });
 
   if (res.status === 401) {
-    // Token expired or invalid — reload to trigger auth check and redirect to login
-    window.location.reload();
+    // Token expired or invalid — let caller handle (auth check shows login, etc.)
     throw new Error('Unauthorized');
   }
 
