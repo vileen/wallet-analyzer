@@ -7,6 +7,7 @@ import { startWorker } from './worker';
 import authRoutes from './routes/auth';
 import walletRoutes from './routes/wallets';
 import transactionRoutes from './routes/transactions';
+import holdingsRoutes from './routes/holdings';
 
 const app = express();
 const PORT = process.env.PORT || 3004;
@@ -25,6 +26,7 @@ app.use('/api/auth', authRoutes);
 // Protected routes
 app.use('/api/wallets', authMiddleware, walletRoutes);
 app.use('/api/transactions', authMiddleware, transactionRoutes);
+app.use('/api/holdings', authMiddleware, holdingsRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

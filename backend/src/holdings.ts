@@ -1,0 +1,124 @@
+import { query } from './db';
+import { resolveToken } from './tokenResolver';
+
+const SOLANA_RPC = 'https://api.mainnet-beta.solana.com';
+
+interface TokenBalance {
+  mint: string;
+  amount: string;
+  decimals: number;
+  uiAmount: number;
+}
+
+interface Holding {
+  mint: string;
+  symbol: string;
+  name: string;
+  decimals: number;
+  amount: number;
+  price_usd: number | null;
+  value_usd: number | null;
+  pool_address?: string;
+}
+
+export async function fetchWalletHoldings(walletAddress: string): Promise<Holding[]> {
+  // 1. Get SOL balance
+  const solBalance = await fetchSolBalance(walletAddress);
+
+  // 2. Get token accounts
+  const tokenBalances = await fetchTokenAccounts(walletAddress);
+
+  // 3. Combine SOL + tokens, filter dust
+  const allBalances: TokenBalance[] = [
+    { mint: 'So11111111111111111111111111111111111111112', amount: String(solBalance * 1e9), decimals: 9, uiAmount: solBalance },
+    ...tokenBalances.filter(t => t.uiAmount > 0),
+  ];
+
+  // 4. Resolve token metadata and prices in parallel
+  const holdings: Holding[] = await Promise.all(
+    allBalances.map(async (bal) => {
+      const tokenInfo = await resolveToken(bal.mint);
+      const price = await fetchTokenPrice(bal.mint);
+      const valueUsd = price !== null ? bal.uiAmount * price : null;
+
+      return {
+        mint: bal.mint,
+        symbol: tokenInfo?.symbol || 'Unknown',
+        name: tokenInfo?.name || 'Unknown Token',
+        decimals: tokenInfo?.decimals || bal.decimals,
+        amount: bal.uiAmount,
+        price_usd: price,
+        value_usd: valueUsd,
+        pool_address: (tokenInfo as any)?.pool_address,
+      };
+    })
+  );
+
+  // 5. Filter out very small dust (< $0.01) and sort by value
+  return holdings
+    .filter(h => (h.value_usd ?? 0) >= 0.01 || h.amount > 0)
+    .sort((a, b) => (b.value_usd ?? 0) - (a.value_usd ?? 0));
+}
+
+async function fetchSolBalance(address: string): Promise<number> {
+  const response = await fetch(SOLANA_RPC, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'getBalance',
+      params: [address],
+    }),
+  });
+
+  const data = await response.json() as any;
+  return (data.result?.value ?? 0) / 1e9;
+}
+
+async function fetchTokenAccounts(address: string): Promise<TokenBalance[]> {
+  const response = await fetch(SOLANA_RPC, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'getTokenAccountsByOwner',
+      params: [
+        address,
+        { programId: 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA' },
+        { encoding: 'jsonParsed' },
+      ],
+    }),
+  });
+
+  const data = await response.json() as any;
+  if (!data.result?.value) return [];
+
+  return data.result.value.map((item: any) => {
+    const info = item.account.data.parsed.info;
+    return {
+      mint: info.mint,
+      amount: info.tokenAmount.amount,
+      decimals: info.tokenAmount.decimals,
+      uiAmount: info.tokenAmount.uiAmount ?? 0,
+    };
+  });
+}
+
+async function fetchTokenPrice(mint: string): Promise<number | null> {
+  try {
+    // Try DexScreener first
+    const response = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`);
+    if (!response.ok) return null;
+
+    const data = await response.json() as any;
+    if (!data.pairs || data.pairs.length === 0) return null;
+
+    const pair = data.pairs[0];
+    const price = parseFloat(pair.priceUsd);
+    return isNaN(price) ? null : price;
+  } catch {
+    return null;
+  }
+}

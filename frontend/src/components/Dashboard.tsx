@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { auth, wallets as walletsApi, transactions as txApi } from '../api/client';
 import WalletList from './WalletList';
 import TransactionList from './TransactionList';
+import Holdings from './Holdings';
 
 interface Wallet {
   id: number;
@@ -20,6 +21,7 @@ export default function Dashboard({ onLogout }: { onLogout: () => void }) {
   const [wallets, setWallets] = useState<Wallet[]>([]);
   const [stats, setStats] = useState<TxStats[]>([]);
   const [selectedWallet, setSelectedWallet] = useState<number | null>(null);
+  const [activeTab, setActiveTab] = useState<'transactions' | 'holdings'>('transactions');
   const [refreshKey, setRefreshKey] = useState(0);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
 
@@ -120,9 +122,45 @@ export default function Dashboard({ onLogout }: { onLogout: () => void }) {
           </div>
         </div>
 
-        <TransactionList walletId={selectedWallet} refreshKey={refreshKey} />
+        <div>
+          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+            <TabButton active={activeTab === 'transactions'} onClick={() => setActiveTab('transactions')}>
+              Transactions
+            </TabButton>
+            <TabButton active={activeTab === 'holdings'} onClick={() => setActiveTab('holdings')}>
+              Holdings
+            </TabButton>
+          </div>
+
+          {activeTab === 'transactions' ? (
+            <TransactionList walletId={selectedWallet} refreshKey={refreshKey} />
+          ) : (
+            <Holdings walletId={selectedWallet} />
+          )}
+        </div>
       </div>
     </div>
+  );
+}
+
+function TabButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        padding: '0.5rem 1rem',
+        borderRadius: '6px',
+        border: '1px solid #444',
+        background: active ? '#512da8' : 'transparent',
+        color: '#e0e0e0',
+        cursor: 'pointer',
+        fontSize: '0.875rem',
+        fontWeight: active ? 600 : 400,
+        transition: 'background 0.2s',
+      }}
+    >
+      {children}
+    </button>
   );
 }
 

@@ -39,6 +39,10 @@ export const wallets = {
   update: (id: number, data: { label?: string; is_active?: boolean }) => api(`/api/wallets/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
 };
 
+export const holdings = {
+  get: (walletId: number) => api(`/api/holdings/${walletId}`),
+};
+
 export const transactions = {
   list: (params?: { wallet_id?: number; type?: string; show_spam?: boolean; limit?: number; offset?: number }) => {
     const qs = new URLSearchParams();
