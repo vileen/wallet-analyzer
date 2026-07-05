@@ -5,7 +5,9 @@ const HELIUS_API_KEY = process.env.HELIUS_API_KEY;
 const HELIUS_BASE = 'https://api.helius.xyz/v0';
 
 const PUMP_FUN_PROGRAM = new PublicKey('6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P');
+const PUMP_SWAP_PROGRAM = new PublicKey('LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo');
 const BONDING_CURVE_SEED = Buffer.from('bonding_curve');
+const SOLANA_RPC = 'https://api.mainnet-beta.solana.com';
 
 // Hardcoded known tokens - covers 99% of transactions
 const KNOWN_TOKENS: Record<string, { symbol: string; name: string; decimals: number; pool_address?: string }> = {
@@ -66,8 +68,8 @@ export async function resolveToken(mint: string): Promise<TokenInfo | null> {
   // 4. Try Helius API
   const heliusInfo = await fetchHeliusTokenInfo(mint);
   if (heliusInfo) {
-    // Also try to find pool address via bonding curve for Pump.fun tokens
-    const poolAddress = derivePumpFunBondingCurve(mint);
+    // Find the correct pool address for Axiom
+    const poolAddress = await findLBUZPool(mint) || derivePumpFunBondingCurve(mint);
     await cacheToken(mint, heliusInfo.symbol, heliusInfo.name, heliusInfo.decimals, poolAddress);
     return { ...heliusInfo, pool_address: poolAddress };
   }
@@ -75,7 +77,7 @@ export async function resolveToken(mint: string): Promise<TokenInfo | null> {
   // 5. Try on-chain Metaplex metadata
   const onChainInfo = await fetchOnChainMetadata(mint);
   if (onChainInfo) {
-    const poolAddress = derivePumpFunBondingCurve(mint);
+    const poolAddress = await findLBUZPool(mint) || derivePumpFunBondingCurve(mint);
     await cacheToken(mint, onChainInfo.symbol, onChainInfo.name, onChainInfo.decimals, poolAddress);
     return { ...onChainInfo, pool_address: poolAddress };
   }
@@ -94,6 +96,58 @@ function derivePumpFunBondingCurve(mint: string): string | undefined {
     );
     return pda.toBase58();
   } catch {
+    return undefined;
+  }
+}
+
+// Find the LBUZKh... pool for a given mint by querying Solana RPC.
+// These pools contain the mint at offset 88 in their account data.
+export async function findLBUZPool(mint: string): Promise<string | undefined> {
+  try {
+    const response = await fetch(SOLANA_RPC, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'getProgramAccounts',
+        params: [
+          PUMP_SWAP_PROGRAM.toBase58(),
+          {
+            filters: [
+              { memcmp: { offset: 88, bytes: mint } },
+            ],
+            encoding: 'base64',
+          },
+        ],
+      }),
+    });
+
+    const data = await response.json() as any;
+    if (!data.result || data.result.length === 0) return undefined;
+
+    // Known pattern from verified example (Eb2zbWj... pool)
+    // First 16 bytes: 210b3162b565b10dc4092c01b0048813
+    const KNOWN_PATTERN = Buffer.from('210b3162b565b10dc4092c01b0048813', 'hex');
+
+    // If multiple pools, prefer the one matching the known pattern
+    for (const acc of data.result) {
+      const accountData = Buffer.from(acc.account.data[0], 'base64');
+      if (accountData.length >= 16 && accountData.slice(0, 16).equals(KNOWN_PATTERN)) {
+        return acc.pubkey;
+      }
+    }
+
+    // Fallback: return the account with the most lamports (most funded = most active)
+    let best = data.result[0];
+    for (const acc of data.result) {
+      if (acc.account.lamports > best.account.lamports) {
+        best = acc;
+      }
+    }
+    return best.pubkey;
+  } catch (error) {
+    console.error(`[TokenResolver] findLBUZPool failed for ${mint}:`, error);
     return undefined;
   }
 }
@@ -124,17 +178,17 @@ async function fetchDexScreenerTokenInfo(mint: string): Promise<TokenInfo | null
     const token = pair.baseToken;
     if (!token.symbol || !token.name) return null;
 
-    // Determine pool address:
-    // - For Pump.fun / PumpSwap: derive bonding curve (DexScreener pairAddress is the LP, not the curve)
-    // - For Raydium/Orca/Meteora: try pairAddress first
-    let poolAddress: string | undefined;
-    const dexId = pair.dexId?.toLowerCase() || '';
-
-    if (dexId.includes('pump') || dexId.includes('pumpfun') || dexId.includes('pumpswap')) {
-      poolAddress = derivePumpFunBondingCurve(mint);
-    } else {
-      // For other DEXes, pairAddress might work on Axiom
-      poolAddress = pair.pairAddress;
+    // Determine pool address for Axiom:
+    // - Try LBUZ program pool first (what Axiom actually uses)
+    // - Fallback to bonding curve for Pump.fun tokens
+    let poolAddress: string | undefined = await findLBUZPool(mint);
+    if (!poolAddress) {
+      const dexId = pair.dexId?.toLowerCase() || '';
+      if (dexId.includes('pump') || dexId.includes('pumpfun') || dexId.includes('pumpswap')) {
+        poolAddress = derivePumpFunBondingCurve(mint);
+      } else {
+        poolAddress = pair.pairAddress;
+      }
     }
 
     return {
