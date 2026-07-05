@@ -107,18 +107,42 @@ async function fetchTokenAccounts(address: string): Promise<TokenBalance[]> {
 }
 
 async function fetchTokenPrice(mint: string): Promise<number | null> {
+  // 1. Try DexScreener - filter for pairs where mint is the BASE token
   try {
-    // Try DexScreener first
     const response = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`);
-    if (!response.ok) return null;
-
-    const data = await response.json() as any;
-    if (!data.pairs || data.pairs.length === 0) return null;
-
-    const pair = data.pairs[0];
-    const price = parseFloat(pair.priceUsd);
-    return isNaN(price) ? null : price;
+    if (response.ok) {
+      const data = await response.json() as any;
+      const pairs = data.pairs || [];
+      // Only use pairs where the requested mint is the base token
+      const basePairs = pairs.filter((p: any) => 
+        p.baseToken?.address?.toLowerCase() === mint.toLowerCase()
+      );
+      if (basePairs.length > 0) {
+        // Sort by 24h volume descending, pick best
+        const best = basePairs.sort((a: any, b: any) => 
+          (b.volume?.h24 || 0) - (a.volume?.h24 || 0)
+        )[0];
+        const price = parseFloat(best.priceUsd);
+        if (!isNaN(price) && price > 0) return price;
+      }
+    }
   } catch {
-    return null;
+    // ignore
   }
+
+  // 2. Fallback to Jupiter Price API v3
+  try {
+    const response = await fetch(`https://api.jup.ag/price/v3?ids=${mint}`);
+    if (response.ok) {
+      const data = await response.json() as any;
+      const tokenData = data[mint];
+      if (tokenData?.usdPrice) {
+        return parseFloat(tokenData.usdPrice);
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  return null;
 }
