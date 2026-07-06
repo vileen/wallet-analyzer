@@ -8,8 +8,8 @@ import { saveHoldingsSnapshot } from './holdings';
 let isRunning = false;
 
 export function startWorker(): void {
-  // Run every 5 minutes
-  cron.schedule('*/5 * * * *', async () => {
+  // Run every 15 minutes (reduced from 5 min to avoid Helius rate limits)
+  cron.schedule('*/15 * * * *', async () => {
     if (isRunning) {
       console.log('[Worker] Previous run still in progress, skipping...');
       return;
@@ -24,7 +24,7 @@ export function startWorker(): void {
     }
   });
 
-  console.log('[Worker] Started - polling every minute');
+  console.log('[Worker] Started - polling every 15 minutes');
 }
 
 async function processWallets(): Promise<void> {
@@ -36,7 +36,6 @@ async function processWallets(): Promise<void> {
   for (const wallet of wallets.rows) {
     try {
       await processWallet(wallet, trackedAddresses);
-      // Snapshot holdings every run (5 min intervals)
       await saveHoldingsSnapshot(wallet.id, wallet.address);
       console.log(`[Worker] Snapshotted holdings for ${wallet.label || wallet.address}`);
     } catch (error) {
