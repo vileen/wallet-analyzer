@@ -39,7 +39,12 @@ export const wallets = {
 };
 
 export const holdings = {
-  get: (walletId: number) => api(`/api/holdings/${walletId}`),
+  get: (walletId: number, params?: { refresh?: string }) => {
+    const qs = new URLSearchParams();
+    if (params?.refresh) qs.set('refresh', params.refresh);
+    return api(`/api/holdings/${walletId}?${qs}`);
+  },
+  refresh: (walletId: number) => api(`/api/holdings/${walletId}/refresh`, { method: 'POST' }),
 };
 
 export const transactions = {

@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { holdings as holdingsApi } from '../api/client';
 
-interface Holding {
+interface HoldingItem {
   mint: string;
   symbol: string;
   name: string;
@@ -10,6 +10,27 @@ interface Holding {
   price_usd: number | null;
   value_usd: number | null;
   pool_address?: string;
+}
+
+interface HoldingChange {
+  mint: string;
+  symbol: string;
+  change_amount: number;
+  change_value_usd: number | null;
+  direction: 'inflow' | 'outflow' | 'new' | 'removed';
+  previous_amount: number | null;
+  current_amount: number;
+}
+
+interface HoldingsResponse {
+  id: number;
+  wallet_id: number;
+  snapshot_at: string;
+  total_value_usd: number | null;
+  sol_balance: number | null;
+  items: HoldingItem[];
+  changes: HoldingChange[];
+  previous_snapshot_at: string | null;
 }
 
 function AxiomLink({ mint, children }: { mint: string; children: React.ReactNode }) {
@@ -43,26 +64,48 @@ function SolscanLink({ mint, children }: { mint: string; children: React.ReactNo
 }
 
 export default function Holdings({ walletId }: { walletId: number | null }) {
-  const [holdings, setHoldings] = useState<Holding[]>([]);
+  const [data, setData] = useState<HoldingsResponse | null>(null);
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedMint, setExpandedMint] = useState<string | null>(null);
+  const [showChanges, setShowChanges] = useState(true);
+
+  const fetchData = async (forceRefresh = false) => {
+    if (!walletId) return;
+    setLoading(true);
+    try {
+      const params = forceRefresh ? { refresh: 'true' } : {};
+      const result = await holdingsApi.get(walletId, params);
+      setData(result);
+    } catch (err) {
+      console.error('Failed to fetch holdings:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const doRefresh = async () => {
+    if (!walletId) return;
+    setRefreshing(true);
+    try {
+      const result = await holdingsApi.refresh(walletId);
+      setData(result);
+    } catch (err) {
+      console.error('Refresh failed:', err);
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   useEffect(() => {
-    if (!walletId) {
-      setHoldings([]);
-      return;
-    }
-    setLoading(true);
-    holdingsApi.get(walletId)
-      .then(setHoldings)
-      .catch(() => setHoldings([]))
-      .finally(() => setLoading(false));
+    fetchData();
   }, [walletId]);
 
   const displayHoldings = useMemo(() => {
-    return holdings.filter(h => h.mint === 'So11111111111111111111111111111111111111112' || (h.value_usd ?? 0) >= 1);
-  }, [holdings]);
+    if (!data || !Array.isArray(data.items)) return [];
+    return data.items.filter(h => h.mint === 'So11111111111111111111111111111111111111112' || (h.value_usd ?? 0) >= 1);
+  }, [data]);
 
   const filteredHoldings = useMemo(() => {
     if (!searchTerm) return displayHoldings;
@@ -80,7 +123,6 @@ export default function Holdings({ walletId }: { walletId: number | null }) {
   const tokenCount = tokenHoldings.length;
   const tokensWithValue = tokenHoldings.filter(h => (h.value_usd ?? 0) > 0).length;
 
-  // Top 5 holdings for allocation bar
   const topHoldings = [...displayHoldings]
     .filter(h => (h.value_usd ?? 0) > 0)
     .sort((a, b) => (b.value_usd ?? 0) - (a.value_usd ?? 0))
@@ -107,6 +149,26 @@ export default function Holdings({ walletId }: { walletId: number | null }) {
     return colors[index % colors.length];
   };
 
+  const getChangeColor = (direction: string) => {
+    switch (direction) {
+      case 'inflow': return '#4caf50';
+      case 'outflow': return '#f44336';
+      case 'new': return '#2196f3';
+      case 'removed': return '#ff9800';
+      default: return '#888';
+    }
+  };
+
+  const getChangeIcon = (direction: string) => {
+    switch (direction) {
+      case 'inflow': return '↑';
+      case 'outflow': return '↓';
+      case 'new': return '✦';
+      case 'removed': return '✗';
+      default: return '→';
+    }
+  };
+
   if (!walletId) {
     return (
       <div style={{ textAlign: 'center', padding: '2rem', color: '#666' }}>
@@ -115,16 +177,109 @@ export default function Holdings({ walletId }: { walletId: number | null }) {
     );
   }
 
-  if (loading) {
+  if (loading && !data) {
     return <div style={{ textAlign: 'center', padding: '2rem', color: '#666' }}>Loading holdings...</div>;
   }
 
-  if (holdings.length === 0) {
+  if (!data || data.items.length === 0) {
     return <div style={{ textAlign: 'center', padding: '2rem', color: '#666' }}>No holdings found</div>;
   }
 
   return (
     <div>
+      {/* Header with refresh */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+        <div>
+          <div style={{ fontSize: '0.75rem', color: '#888' }}>
+            Last updated: {new Date(data.snapshot_at).toLocaleString()}
+            {data.previous_snapshot_at && (
+              <span style={{ marginLeft: '0.5rem', color: '#555' }}>
+                (vs {new Date(data.previous_snapshot_at).toLocaleString()})
+              </span>
+            )}
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <button
+            onClick={() => setShowChanges(!showChanges)}
+            style={{
+              padding: '0.5rem 1rem',
+              borderRadius: '6px',
+              border: '1px solid #333',
+              background: showChanges ? '#7c4dff33' : '#1a1a1a',
+              color: showChanges ? '#7c4dff' : '#888',
+              cursor: 'pointer',
+              fontSize: '0.875rem',
+            }}
+          >
+            Changes {data.changes?.length > 0 && `(${data.changes.length})`}
+          </button>
+          <button
+            onClick={doRefresh}
+            disabled={refreshing}
+            style={{
+              padding: '0.5rem 1rem',
+              borderRadius: '6px',
+              border: '1px solid #333',
+              background: '#1a1a1a',
+              color: refreshing ? '#555' : '#e0e0e0',
+              cursor: refreshing ? 'not-allowed' : 'pointer',
+              fontSize: '0.875rem',
+            }}
+          >
+            {refreshing ? 'Refreshing...' : '⟳ Refresh'}
+          </button>
+        </div>
+      </div>
+
+      {/* Changes Panel */}
+      {showChanges && data.changes && data.changes.length > 0 && (
+        <div style={{ background: '#1a1a1a', borderRadius: '8px', padding: '1rem', marginBottom: '1.5rem' }}>
+          <div style={{ fontSize: '0.875rem', color: '#888', marginBottom: '0.75rem', fontWeight: 600 }}>
+            Changes Since Last Snapshot
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            {data.changes.map(change => (
+              <div
+                key={change.mint}
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '30px 1fr 120px 120px',
+                  gap: '1rem',
+                  alignItems: 'center',
+                  padding: '0.5rem 0.75rem',
+                  background: '#252525',
+                  borderRadius: '6px',
+                  fontSize: '0.875rem',
+                }}
+              >
+                <span style={{ color: getChangeColor(change.direction), fontWeight: 600 }}>
+                  {getChangeIcon(change.direction)}
+                </span>
+                <div>
+                  <AxiomLink mint={change.mint}>
+                    <span style={{ fontWeight: 500, color: '#e0e0e0' }}>{change.symbol}</span>
+                  </AxiomLink>
+                  <span style={{ color: '#555', fontSize: '0.75rem', marginLeft: '0.5rem' }}>
+                    {change.direction}
+                  </span>
+                </div>
+                <div style={{ textAlign: 'right', color: getChangeColor(change.direction) }}>
+                  {change.change_amount > 0 ? '+' : ''}{formatAmount(change.change_amount, 6)}
+                </div>
+                <div style={{ textAlign: 'right', color: getChangeColor(change.direction) }}>
+                  {change.change_value_usd !== null && (
+                    <span>
+                      {change.change_value_usd > 0 ? '+' : ''}{formatUsd(change.change_value_usd)}
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Portfolio Overview */}
       <div style={{
         display: 'grid',
@@ -140,7 +295,7 @@ export default function Holdings({ walletId }: { walletId: number | null }) {
 
       {/* Allocation Bar */}
       <div style={{ fontSize: '0.75rem', color: '#666', marginBottom: '0.5rem' }}>
-        Showing {displayHoldings.length} of {holdings.length} tokens (skipping sub-$1)
+        Showing {displayHoldings.length} of {data.items.length} tokens (skipping sub-$1)
       </div>
       {topHoldings.length > 0 && (
         <div style={{ background: '#1a1a1a', borderRadius: '8px', padding: '1rem', marginBottom: '1rem' }}>

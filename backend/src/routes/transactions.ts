@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { query } from '../db';
+import { resolveToken } from '../tokenResolver';
 import { AuthRequest } from '../auth';
 
 const router = Router();
@@ -35,7 +36,35 @@ router.get('/', async (req: AuthRequest, res) => {
   params.push(parseInt(limit as string), parseInt(offset as string));
 
   const result = await query(sql, params);
-  res.json(result.rows);
+
+  // Resolve missing pool addresses on the fly so Axiom links are correct
+  const rows = result.rows;
+  const missingMints = new Set<string>();
+  for (const row of rows) {
+    if (row.token_mint && !row.token_pool_address) {
+      missingMints.add(row.token_mint);
+    }
+  }
+
+  if (missingMints.size > 0) {
+    const resolved = new Map<string, string>();
+    await Promise.all(
+      Array.from(missingMints).map(async (mint) => {
+        const info = await resolveToken(mint);
+        if (info?.pool_address) {
+          resolved.set(mint, info.pool_address);
+        }
+      })
+    );
+
+    for (const row of rows) {
+      if (row.token_mint && resolved.has(row.token_mint)) {
+        row.token_pool_address = resolved.get(row.token_mint);
+      }
+    }
+  }
+
+  res.json(rows);
 });
 
 router.get('/stats', async (req: AuthRequest, res) => {

@@ -49,8 +49,14 @@ export async function resolveToken(mint: string): Promise<TokenInfo | null> {
   }
 
   // 2. Check database cache (but not if it's UNKNOWN or PUMP - those are likely bad data)
+  // Also re-resolve if pool_address is missing since we need it for Axiom links
   const cached = await query('SELECT symbol, name, decimals, pool_address FROM tokens WHERE mint = $1', [mint]);
-  if (cached.rows.length > 0 && cached.rows[0].symbol && !['UNKNOWN', 'PUMP'].includes(cached.rows[0].symbol)) {
+  if (
+    cached.rows.length > 0 &&
+    cached.rows[0].symbol &&
+    !['UNKNOWN', 'PUMP'].includes(cached.rows[0].symbol) &&
+    cached.rows[0].pool_address  // re-resolve if pool address missing
+  ) {
     return {
       symbol: cached.rows[0].symbol,
       name: cached.rows[0].name,

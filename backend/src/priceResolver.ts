@@ -1,12 +1,5 @@
 import { query } from './db';
-
-interface PriceCache {
-  price: number;
-  timestamp: number;
-}
-
-const priceCache: Map<string, PriceCache> = new Map();
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+import { getCachedPrice, setCachedPrice } from './priceCache';
 
 // Hardcoded prices for stablecoins
 const STABLECOINS: Record<string, number> = {
@@ -82,10 +75,10 @@ export async function getTokenPrice(mint: string): Promise<number | null> {
     return STABLECOINS[mint];
   }
 
-  // Check cache
-  const cached = priceCache.get(mint);
-  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-    return cached.price;
+  // Check database cache (shared across restarts)
+  const cachedPrice = await getCachedPrice(mint);
+  if (cachedPrice !== null) {
+    return cachedPrice;
   }
 
   // Try DexScreener first (more reliable for Solana)
@@ -96,10 +89,8 @@ export async function getTokenPrice(mint: string): Promise<number | null> {
     price = await fetchCoinGeckoPrice(mint);
   }
 
-  // Cache the result (even if null, to avoid hammering APIs)
-  if (price !== null) {
-    priceCache.set(mint, { price, timestamp: Date.now() });
-  }
+  // Store in database cache (even null to avoid hammering APIs)
+  await setCachedPrice(mint, price);
 
   return price;
 }

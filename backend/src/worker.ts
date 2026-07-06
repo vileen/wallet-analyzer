@@ -3,6 +3,7 @@ import { query } from './db';
 import { fetchTransactions, classifyTransaction, ParsedTransaction } from './solana';
 import { resolveToken } from './tokenResolver';
 import { getTokenPrice, calculateUsdValue } from './priceResolver';
+import { saveHoldingsSnapshot } from './holdings';
 
 let isRunning = false;
 
@@ -35,6 +36,9 @@ async function processWallets(): Promise<void> {
   for (const wallet of wallets.rows) {
     try {
       await processWallet(wallet, trackedAddresses);
+      // Snapshot holdings every run (5 min intervals)
+      await saveHoldingsSnapshot(wallet.id, wallet.address);
+      console.log(`[Worker] Snapshotted holdings for ${wallet.label || wallet.address}`);
     } catch (error) {
       console.error(`[Worker] Failed to process wallet ${wallet.address}:`, error);
     }
