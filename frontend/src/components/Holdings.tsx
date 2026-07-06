@@ -6,28 +6,28 @@ interface HoldingItem {
   symbol: string;
   name: string;
   decimals: number;
-  amount: number;
-  price_usd: number | null;
-  value_usd: number | null;
+  amount: number | string;
+  price_usd: number | string | null;
+  value_usd: number | string | null;
   pool_address?: string;
 }
 
 interface HoldingChange {
   mint: string;
   symbol: string;
-  change_amount: number;
-  change_value_usd: number | null;
+  change_amount: number | string;
+  change_value_usd: number | string | null;
   direction: 'inflow' | 'outflow' | 'new' | 'removed';
-  previous_amount: number | null;
-  current_amount: number;
+  previous_amount: number | string | null;
+  current_amount: number | string;
 }
 
 interface HoldingsResponse {
   id: number;
   wallet_id: number;
   snapshot_at: string;
-  total_value_usd: number | null;
-  sol_balance: number | null;
+  total_value_usd: number | string | null;
+  sol_balance: number | string | null;
   items: HoldingItem[];
   changes: HoldingChange[];
   previous_snapshot_at: string | null;
@@ -61,6 +61,12 @@ function SolscanLink({ mint, children }: { mint: string; children: React.ReactNo
       {children}
     </a>
   );
+}
+
+function toNum(v: number | string | null | undefined): number {
+  if (v === null || v === undefined) return 0;
+  if (typeof v === 'string') return parseFloat(v);
+  return v;
 }
 
 export default function Holdings({ walletId }: { walletId: number | null }) {
@@ -104,7 +110,7 @@ export default function Holdings({ walletId }: { walletId: number | null }) {
 
   const displayHoldings = useMemo(() => {
     if (!data || !Array.isArray(data.items)) return [];
-    return data.items.filter(h => h.mint === 'So11111111111111111111111111111111111111112' || (h.value_usd ?? 0) >= 1);
+    return data.items.filter(h => h.mint === 'So11111111111111111111111111111111111111112' || toNum(h.value_usd) >= 1);
   }, [data]);
 
   const filteredHoldings = useMemo(() => {
@@ -117,31 +123,33 @@ export default function Holdings({ walletId }: { walletId: number | null }) {
     );
   }, [displayHoldings, searchTerm]);
 
-  const totalValue = displayHoldings.reduce((sum, h) => sum + (h.value_usd ?? 0), 0);
+  const totalValue = displayHoldings.reduce((sum, h) => sum + toNum(h.value_usd), 0);
   const solHolding = displayHoldings.find(h => h.mint === 'So11111111111111111111111111111111111111112');
   const tokenHoldings = displayHoldings.filter(h => h.mint !== 'So11111111111111111111111111111111111111112');
   const tokenCount = tokenHoldings.length;
-  const tokensWithValue = tokenHoldings.filter(h => (h.value_usd ?? 0) > 0).length;
+  const tokensWithValue = tokenHoldings.filter(h => toNum(h.value_usd) > 0).length;
 
   const topHoldings = [...displayHoldings]
-    .filter(h => (h.value_usd ?? 0) > 0)
-    .sort((a, b) => (b.value_usd ?? 0) - (a.value_usd ?? 0))
+    .filter(h => toNum(h.value_usd) > 0)
+    .sort((a, b) => toNum(b.value_usd) - toNum(a.value_usd))
     .slice(0, 5);
 
-  const formatAmount = (amount: number, decimals: number = 6) => {
-    if (amount === 0) return '0';
-    if (amount < 0.001) return amount.toExponential(2);
-    return amount.toLocaleString('en-US', { maximumFractionDigits: decimals });
+  const formatAmount = (amount: number | string | null | undefined, decimals: number = 6) => {
+    const num = toNum(amount);
+    if (num === 0) return '0';
+    if (num < 0.001) return num.toExponential(2);
+    return num.toLocaleString('en-US', { maximumFractionDigits: decimals });
   };
 
-  const formatUsd = (value: number | null) => {
-    if (value === null) return '-';
-    if (value === 0) return '$0';
-    if (value < 0.01) return '$' + value.toExponential(2);
-    if (value < 1) return '$' + value.toFixed(4);
-    if (value < 1000) return '$' + value.toFixed(2);
-    if (value < 1000000) return '$' + (value / 1000).toFixed(1) + 'K';
-    return '$' + (value / 1000000).toFixed(1) + 'M';
+  const formatUsd = (value: number | string | null | undefined) => {
+    const num = toNum(value);
+    if (value === null || value === undefined) return '-';
+    if (num === 0) return '$0';
+    if (num < 0.01) return '$' + num.toExponential(2);
+    if (num < 1) return '$' + num.toFixed(4);
+    if (num < 1000) return '$' + num.toFixed(2);
+    if (num < 1000000) return '$' + (num / 1000).toFixed(1) + 'K';
+    return '$' + (num / 1000000).toFixed(1) + 'M';
   };
 
   const getAllocationColor = (index: number) => {
@@ -181,7 +189,7 @@ export default function Holdings({ walletId }: { walletId: number | null }) {
     return <div style={{ textAlign: 'center', padding: '2rem', color: '#666' }}>Loading holdings...</div>;
   }
 
-  if (!data || data.items.length === 0) {
+  if (!data || !Array.isArray(data.items) || data.items.length === 0) {
     return <div style={{ textAlign: 'center', padding: '2rem', color: '#666' }}>No holdings found</div>;
   }
 
@@ -265,12 +273,12 @@ export default function Holdings({ walletId }: { walletId: number | null }) {
                   </span>
                 </div>
                 <div style={{ textAlign: 'right', color: getChangeColor(change.direction) }}>
-                  {change.change_amount > 0 ? '+' : ''}{formatAmount(change.change_amount, 6)}
+                  {toNum(change.change_amount) > 0 ? '+' : ''}{formatAmount(change.change_amount, 6)}
                 </div>
                 <div style={{ textAlign: 'right', color: getChangeColor(change.direction) }}>
                   {change.change_value_usd !== null && (
                     <span>
-                      {change.change_value_usd > 0 ? '+' : ''}{formatUsd(change.change_value_usd)}
+                      {toNum(change.change_value_usd) > 0 ? '+' : ''}{formatUsd(change.change_value_usd)}
                     </span>
                   )}
                 </div>
@@ -302,7 +310,7 @@ export default function Holdings({ walletId }: { walletId: number | null }) {
           <div style={{ fontSize: '0.875rem', color: '#888', marginBottom: '0.5rem' }}>Top Holdings</div>
           <div style={{ display: 'flex', height: '24px', borderRadius: '4px', overflow: 'hidden' }}>
             {topHoldings.map((h, i) => {
-              const pct = totalValue > 0 ? ((h.value_usd ?? 0) / totalValue) * 100 : 0;
+              const pct = totalValue > 0 ? (toNum(h.value_usd) / totalValue) * 100 : 0;
               return (
                 <div
                   key={h.mint}
@@ -318,7 +326,7 @@ export default function Holdings({ walletId }: { walletId: number | null }) {
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', marginTop: '0.5rem' }}>
             {topHoldings.map((h, i) => {
-              const pct = totalValue > 0 ? ((h.value_usd ?? 0) / totalValue) * 100 : 0;
+              const pct = totalValue > 0 ? (toNum(h.value_usd) / totalValue) * 100 : 0;
               return (
                 <div key={h.mint} style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.75rem' }}>
                   <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: getAllocationColor(i) }} />
@@ -354,7 +362,7 @@ export default function Holdings({ walletId }: { walletId: number | null }) {
       {/* Holdings List */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
         {filteredHoldings.map(h => {
-          const pct = totalValue > 0 && h.value_usd ? (h.value_usd / totalValue) * 100 : 0;
+          const pct = totalValue > 0 && toNum(h.value_usd) ? (toNum(h.value_usd) / totalValue) * 100 : 0;
           const isExpanded = expandedMint === h.mint;
           const isSol = h.mint === 'So11111111111111111111111111111111111111112';
 
@@ -408,7 +416,7 @@ export default function Holdings({ walletId }: { walletId: number | null }) {
                 </div>
 
                 <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontWeight: 600, color: h.value_usd && h.value_usd > 0 ? '#4caf50' : '#e0e0e0' }}>
+                  <div style={{ fontWeight: 600, color: toNum(h.value_usd) > 0 ? '#4caf50' : '#e0e0e0' }}>
                     {formatUsd(h.value_usd)}
                   </div>
                 </div>
@@ -444,7 +452,7 @@ export default function Holdings({ walletId }: { walletId: number | null }) {
                     </div>
                     <div>
                       <div style={{ fontSize: '0.75rem', color: '#888', marginBottom: '0.25rem' }}>Raw Amount</div>
-                      <div style={{ fontSize: '0.875rem', color: '#ccc' }}>{h.amount.toLocaleString('en-US', { maximumFractionDigits: h.decimals })}</div>
+                      <div style={{ fontSize: '0.875rem', color: '#ccc' }}>{toNum(h.amount).toLocaleString('en-US', { maximumFractionDigits: h.decimals })}</div>
                     </div>
                     {h.pool_address && (
                       <div>
