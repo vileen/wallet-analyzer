@@ -44,13 +44,20 @@ export interface HoldingChange {
 // ── Core: fetch from RPC ───────────────────────────────────────────
 
 export async function fetchWalletHoldings(walletAddress: string): Promise<HoldingItem[]> {
+  console.log(`[Holdings] Fetching holdings for ${walletAddress.slice(0, 8)}...`);
+  
   const solBalance = await fetchSolBalance(walletAddress);
+  console.log(`[Holdings] SOL balance: ${solBalance}`);
+  
   const tokenBalances = await fetchTokenAccounts(walletAddress);
+  console.log(`[Holdings] Found ${tokenBalances.length} token accounts`);
 
   const allBalances: TokenBalance[] = [
     { mint: 'So11111111111111111111111111111111111111112', amount: String(solBalance * 1e9), decimals: 9, uiAmount: solBalance },
     ...tokenBalances.filter(t => t.uiAmount > 0),
   ];
+
+  console.log(`[Holdings] Processing ${allBalances.length} balances (${tokenBalances.filter(t => t.uiAmount > 0).length} non-zero tokens)`);
 
   // Batch fetch cached prices first
   const mints = allBalances.map(b => b.mint);
@@ -85,9 +92,12 @@ export async function fetchWalletHoldings(walletAddress: string): Promise<Holdin
     })
   );
 
-  return holdings
+  const result = holdings
     .filter(h => (h.value_usd ?? 0) >= 0.01 || h.amount > 0)
     .sort((a, b) => (b.value_usd ?? 0) - (a.value_usd ?? 0));
+  
+  console.log(`[Holdings] Returning ${result.length} holdings (filtered from ${holdings.length})`);
+  return result;
 }
 
 // ── DB: save snapshot ─────────────────────────────────────────────
@@ -96,7 +106,11 @@ export async function saveHoldingsSnapshot(
   walletId: number,
   walletAddress: string
 ): Promise<HoldingSnapshot> {
+  console.log(`[Holdings] Starting snapshot for wallet ${walletId} (${walletAddress.slice(0, 8)}...)`);
+  
   const holdings = await fetchWalletHoldings(walletAddress);
+  console.log(`[Holdings] Snapshot: ${holdings.length} items, total value $${holdings.reduce((s, h) => s + (h.value_usd ?? 0), 0).toFixed(2)}`);
+  
   const solItem = holdings.find(h => h.mint === 'So11111111111111111111111111111111111111112');
   const totalValue = holdings.reduce((sum, h) => sum + (h.value_usd ?? 0), 0);
 
@@ -107,6 +121,7 @@ export async function saveHoldingsSnapshot(
     [walletId, totalValue, solItem?.amount ?? 0]
   );
   const snapshotId = snapshotResult.rows[0].id;
+  console.log(`[Holdings] Created snapshot ${snapshotId} with total $${totalValue.toFixed(2)}`);
 
   for (const h of holdings) {
     await query(
@@ -115,6 +130,7 @@ export async function saveHoldingsSnapshot(
       [snapshotId, h.mint, h.symbol, h.name, h.decimals, h.amount, h.price_usd, h.value_usd, h.pool_address || null]
     );
   }
+  console.log(`[Holdings] Inserted ${holdings.length} items for snapshot ${snapshotId}`);
 
   return {
     id: snapshotId,
@@ -315,7 +331,7 @@ async function fetchTokenAccounts(address: string): Promise<TokenBalance[]> {
   const SPL_TOKEN_PROGRAM = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
   const TOKEN_2022_PROGRAM = 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb';
 
-  const fetchForProgram = async (programId: string): Promise<TokenBalance[]> => {
+  const fetchForProgram = async (programId: string, attempt = 1): Promise<TokenBalance[]> => {
     const response = await fetch(SOLANA_RPC, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -328,7 +344,25 @@ async function fetchTokenAccounts(address: string): Promise<TokenBalance[]> {
     });
 
     const data = await response.json() as any;
-    if (!data.result?.value) return [];
+    
+    // Log unexpected responses for debugging
+    if (data.error) {
+      console.error(`[Holdings] RPC error for ${programId.slice(0, 8)}... (attempt ${attempt}):`, data.error);
+      if (attempt < 3) {
+        await new Promise(r => setTimeout(r, 1000 * attempt));
+        return fetchForProgram(programId, attempt + 1);
+      }
+      return [];
+    }
+    
+    if (!data.result?.value) {
+      console.warn(`[Holdings] RPC returned no value for ${programId.slice(0, 8)}... (attempt ${attempt})`);
+      if (attempt < 3) {
+        await new Promise(r => setTimeout(r, 1000 * attempt));
+        return fetchForProgram(programId, attempt + 1);
+      }
+      return [];
+    }
 
     return data.result.value.map((item: any) => {
       const info = item.account.data.parsed.info;
