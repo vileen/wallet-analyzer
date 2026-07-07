@@ -49,6 +49,9 @@ export async function fetchWalletHoldings(walletAddress: string): Promise<Holdin
   const solBalance = await fetchSolBalance(walletAddress);
   console.log(`[Holdings] SOL balance: ${solBalance}`);
   
+  // Delay to avoid rate limiting with the next RPC calls
+  await new Promise(r => setTimeout(r, 500));
+  
   const tokenBalances = await fetchTokenAccounts(walletAddress);
   console.log(`[Holdings] Found ${tokenBalances.length} token accounts`);
 
@@ -324,6 +327,17 @@ async function fetchSolBalance(address: string): Promise<number> {
   });
 
   const data = await response.json() as any;
+  
+  if (data.error) {
+    console.error(`[Holdings] RPC error for getBalance:`, data.error);
+    if (data.error?.code === 429) {
+      console.log(`[Holdings] Retrying getBalance after 5s...`);
+      await new Promise(r => setTimeout(r, 5000));
+      return fetchSolBalance(address); // retry once
+    }
+    return 0;
+  }
+  
   return (data.result?.value ?? 0) / 1e9;
 }
 
@@ -345,22 +359,19 @@ async function fetchTokenAccounts(address: string): Promise<TokenBalance[]> {
 
     const data = await response.json() as any;
     
-    // Log unexpected responses for debugging
     if (data.error) {
       console.error(`[Holdings] RPC error for ${programId.slice(0, 8)}... (attempt ${attempt}):`, data.error);
-      if (attempt < 3) {
-        await new Promise(r => setTimeout(r, 1000 * attempt));
+      if (attempt < 3 && data.error?.code === 429) {
+        const delay = 5000 * attempt; // 5s, 10s, 15s for rate limits
+        console.log(`[Holdings] Retrying after ${delay}ms...`);
+        await new Promise(r => setTimeout(r, delay));
         return fetchForProgram(programId, attempt + 1);
       }
       return [];
     }
     
     if (!data.result?.value) {
-      console.warn(`[Holdings] RPC returned no value for ${programId.slice(0, 8)}... (attempt ${attempt})`);
-      if (attempt < 3) {
-        await new Promise(r => setTimeout(r, 1000 * attempt));
-        return fetchForProgram(programId, attempt + 1);
-      }
+      console.warn(`[Holdings] RPC returned no value for ${programId.slice(0, 8)}...`);
       return [];
     }
 
@@ -375,10 +386,10 @@ async function fetchTokenAccounts(address: string): Promise<TokenBalance[]> {
     });
   };
 
-  const [splTokens, token2022Tokens] = await Promise.all([
-    fetchForProgram(SPL_TOKEN_PROGRAM),
-    fetchForProgram(TOKEN_2022_PROGRAM),
-  ]);
+  // Serialize calls to avoid public RPC rate limits (don't Promise.all)
+  const splTokens = await fetchForProgram(SPL_TOKEN_PROGRAM);
+  await new Promise(r => setTimeout(r, 500)); // 500ms delay between calls
+  const token2022Tokens = await fetchForProgram(TOKEN_2022_PROGRAM);
 
   return [...splTokens, ...token2022Tokens];
 }
