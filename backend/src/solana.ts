@@ -343,6 +343,57 @@ export function classifyTransaction(
     }
   }
 
+  // Jupiter-style swap: wallet receives stable via intermediate accounts
+  // (e.g., SharedAccountsRouteV2 — token is sent by a pre-funded account, not wallet directly)
+  const isJupiterSwap = programLogs.some((log: string) =>
+    log.includes('JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4')
+  );
+  if (isJupiterSwap) {
+    const ourSends = ourTransfers.filter(t => t.from.toLowerCase() === walletLower);
+    const ourReceives = ourTransfers.filter(t => t.to.toLowerCase() === walletLower);
+
+    // Sell: wallet receives stable, but a non-stable token moved via intermediate
+    if (ourReceives.length > 0 && ourSends.length === 0) {
+      const receivesStable = ourReceives.find(r => isStableCoin(r.mint));
+      if (receivesStable) {
+        // Find non-stable token transfers in this tx that don't involve the wallet directly
+        const nonStableTransfers = tx.transfers.filter(t =>
+          !isStableCoin(t.mint) &&
+          t.from.toLowerCase() !== walletLower &&
+          t.to.toLowerCase() !== walletLower
+        );
+        if (nonStableTransfers.length > 0) {
+          const primary = nonStableTransfers.sort((a, b) => b.amount - a.amount)[0];
+          return {
+            type: 'sell',
+            primaryTransfer: primary,
+            counterpartyTransfer: receivesStable
+          };
+        }
+      }
+    }
+
+    // Buy: wallet sends stable, but a non-stable token arrived via intermediate
+    if (ourSends.length > 0 && ourReceives.length === 0) {
+      const sendsStable = ourSends.find(s => isStableCoin(s.mint));
+      if (sendsStable) {
+        const nonStableTransfers = tx.transfers.filter(t =>
+          !isStableCoin(t.mint) &&
+          t.from.toLowerCase() !== walletLower &&
+          t.to.toLowerCase() !== walletLower
+        );
+        if (nonStableTransfers.length > 0) {
+          const primary = nonStableTransfers.sort((a, b) => b.amount - a.amount)[0];
+          return {
+            type: 'buy',
+            primaryTransfer: primary,
+            counterpartyTransfer: sendsStable
+          };
+        }
+      }
+    }
+  }
+
   // Single transfer = simple transfer in/out
   if (ourTransfers.length === 1) {
     const t = ourTransfers[0];
