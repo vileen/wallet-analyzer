@@ -61,4 +61,10 @@ export const transactions = {
     const qs = wallet_id ? `?wallet_id=${wallet_id}` : '';
     return api(`/api/transactions/stats${qs}`);
   },
+  dailySummary: (wallet_id: number, days?: number) => {
+    const qs = new URLSearchParams();
+    qs.set('wallet_id', String(wallet_id));
+    if (days) qs.set('days', String(days));
+    return api(`/api/transactions/daily-summary?${qs}`);
+  },
 };
