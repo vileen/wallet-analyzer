@@ -295,7 +295,7 @@ export function classifyTransaction(
     .map((ix: any) => ix.parsed?.type || ix.name || '')
     .filter(Boolean);
 
-  const programLogs: string[] = tx.raw?.logMessages || [];
+  const programLogs: string[] = tx.raw?.meta?.logMessages || [];
 
   // Detect liquidity add/remove from program logs
   const hasLiquidityRemove = programLogs.some((log: string) =>
