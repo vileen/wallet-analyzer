@@ -9,6 +9,8 @@ import walletRoutes from './routes/wallets';
 import transactionRoutes from './routes/transactions';
 import holdingsRoutes from './routes/holdings';
 
+import notificationRoutes from './routes/notifications';
+
 const app = express();
 const PORT = process.env.PORT || 3004;
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
@@ -27,6 +29,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/wallets', authMiddleware, walletRoutes);
 app.use('/api/transactions', authMiddleware, transactionRoutes);
 app.use('/api/holdings', authMiddleware, holdingsRoutes);
+app.use('/api/notifications', authMiddleware, notificationRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

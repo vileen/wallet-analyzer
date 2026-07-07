@@ -4,6 +4,7 @@ import { fetchTransactions, classifyTransaction, ParsedTransaction } from './sol
 import { resolveToken } from './tokenResolver';
 import { getTokenPrice, calculateUsdValue } from './priceResolver';
 import { saveHoldingsSnapshot } from './holdings';
+import { notifyNewTransaction } from './notifications';
 
 let isRunning = false;
 
@@ -133,4 +134,16 @@ async function processTransaction(
       JSON.stringify(tx.raw),
     ]
   );
+
+  // Send notification for significant transactions (non-spam, or spam but large)
+  if (!isSpam && usdValue !== null && usdValue >= 1) {
+    await notifyNewTransaction(
+      walletId,
+      type,
+      tokenInfo?.symbol || 'Unknown',
+      primaryTransfer.amount,
+      usdValue,
+      tx.signature
+    );
+  }
 }
