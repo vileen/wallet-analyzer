@@ -119,13 +119,6 @@ export default function Holdings({ walletId }: { walletId: number | null }) {
     }
   }, [walletId, viewMode, dailyDays]);
 
-  // Build a map of current holdings by mint for quick lookup
-  const currentByMint = useMemo(() => {
-    const map = new Map<string, HoldingItem>();
-    data?.items?.forEach(h => map.set(h.mint, h));
-    return map;
-  }, [data]);
-
   // Build a map of changes by mint
   const changesByMint = useMemo(() => {
     const map = new Map<string, HoldingChange>();
@@ -285,162 +278,29 @@ export default function Holdings({ walletId }: { walletId: number | null }) {
         </div>
       </div>
 
-      {/* Snapshot Changes Panel */}
-      {viewMode === 'snapshot' && data?.changes && data.changes.length > 0 && (
-        <div style={{ marginBottom: '1.5rem' }}>
-          {/* Summary bar */}
-          {changeSummary && (
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
-              gap: '0.75rem',
-              marginBottom: '1rem',
-            }}>
-              <SummaryCard
-                label="Net Change"
-                value={formatUsd(changeSummary.netChange)}
-                color={changeSummary.netChange >= 0 ? '#4caf50' : '#f44336'}
-              />
-              <SummaryCard
-                label="Gained / New"
-                value={`+${formatUsd(changeSummary.totalIn)} (${changeSummary.inflow})`}
-                color="#4caf50"
-              />
-              <SummaryCard
-                label="Lost / Removed"
-                value={`-${formatUsd(changeSummary.totalOut)} (${changeSummary.outflow})`}
-                color="#f44336"
-              />
-            </div>
-          )}
-
-          {/* Token change cards */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            {data.changes.map(change => {
-              const current = currentByMint.get(change.mint);
-              const isExpanded = expandedMint === change.mint;
-              const changeColor = getChangeColor(change.direction);
-              const prevAmt = toNum(change.previous_amount);
-              const currAmt = toNum(change.current_amount);
-              const changeAmt = toNum(change.change_amount);
-              const changeVal = toNum(change.change_value_usd);
-
-              return (
-                <div
-                  key={change.mint}
-                  style={{
-                    background: '#1a1a1a',
-                    borderRadius: '8px',
-                    border: `1px solid ${changeColor}33`,
-                    overflow: 'hidden',
-                  }}
-                >
-                  {/* Main row */}
-                  <div
-                    onClick={() => setExpandedMint(isExpanded ? null : change.mint)}
-                    style={{
-                      padding: '1rem',
-                      display: 'grid',
-                      gridTemplateColumns: '1fr 1fr 1fr 120px',
-                      gap: '1rem',
-                      alignItems: 'center',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <AxiomLink mint={change.mint}>
-                          <span style={{ fontWeight: 600, fontSize: '1rem', color: '#e0e0e0' }}>{change.symbol}</span>
-                        </AxiomLink>
-                        <span style={{
-                          fontSize: '0.7rem',
-                          padding: '2px 8px',
-                          borderRadius: '4px',
-                          background: `${changeColor}22`,
-                          color: changeColor,
-                          fontWeight: 600,
-                        }}>
-                          {getChangeLabel(change.direction)}
-                        </span>
-                      </div>
-                      <div style={{ fontSize: '0.75rem', color: '#555', marginTop: '0.25rem' }}>
-                        <SolscanLink mint={change.mint}>
-                          {change.mint.slice(0, 8)}...{change.mint.slice(-4)}
-                        </SolscanLink>
-                      </div>
-                    </div>
-
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: '0.75rem', color: '#666' }}>Amount</div>
-                      <div style={{ fontWeight: 500, color: '#e0e0e0' }}>
-                        {prevAmt > 0 ? (
-                          <span>
-                            {formatAmount(prevAmt)} → {formatAmount(currAmt)}
-                          </span>
-                        ) : (
-                          <span>{formatAmount(currAmt)}</span>
-                        )}
-                      </div>
-                    </div>
-
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: '0.75rem', color: '#666' }}>Value Impact</div>
-                      <div style={{ fontWeight: 600, color: changeColor }}>
-                        {changeVal > 0 ? '+' : ''}{formatUsd(change.change_value_usd)}
-                      </div>
-                    </div>
-
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: '0.75rem', color: '#666' }}>Current</div>
-                      <div style={{ fontWeight: 500, color: '#e0e0e0' }}>
-                        {current ? formatUsd(current.value_usd) : '$0'}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Expanded details */}
-                  {isExpanded && (
-                    <div style={{ padding: '0 1rem 1rem', borderTop: '1px solid #333' }}>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem', paddingTop: '1rem' }}>
-                        <div>
-                          <div style={{ fontSize: '0.75rem', color: '#888' }}>Previous Amount</div>
-                          <div style={{ fontSize: '0.875rem', color: '#ccc' }}>{formatAmount(change.previous_amount)}</div>
-                        </div>
-                        <div>
-                          <div style={{ fontSize: '0.75rem', color: '#888' }}>Current Amount</div>
-                          <div style={{ fontSize: '0.875rem', color: '#ccc' }}>{formatAmount(change.current_amount)}</div>
-                        </div>
-                        <div>
-                          <div style={{ fontSize: '0.75rem', color: '#888' }}>Change</div>
-                          <div style={{ fontSize: '0.875rem', color: changeColor }}>
-                            {changeAmt > 0 ? '+' : ''}{formatAmount(change.change_amount)}
-                          </div>
-                        </div>
-                        <div>
-                          <div style={{ fontSize: '0.75rem', color: '#888' }}>Value Impact</div>
-                          <div style={{ fontSize: '0.875rem', color: changeColor }}>
-                            {changeVal > 0 ? '+' : ''}{formatUsd(change.change_value_usd)}
-                          </div>
-                        </div>
-                        {current && (
-                          <>
-                            <div>
-                              <div style={{ fontSize: '0.75rem', color: '#888' }}>Current Price</div>
-                              <div style={{ fontSize: '0.875rem', color: '#ccc' }}>{formatUsd(current.price_usd)}</div>
-                            </div>
-                            <div>
-                              <div style={{ fontSize: '0.75rem', color: '#888' }}>Current Value</div>
-                              <div style={{ fontSize: '0.875rem', color: '#ccc' }}>{formatUsd(current.value_usd)}</div>
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+      {/* Snapshot Summary Bar */}
+      {viewMode === 'snapshot' && data?.changes && data.changes.length > 0 && changeSummary && (
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+          gap: '0.75rem',
+          marginBottom: '1.5rem',
+        }}>
+          <SummaryCard
+            label="Net Change"
+            value={formatUsd(changeSummary.netChange)}
+            color={changeSummary.netChange >= 0 ? '#4caf50' : '#f44336'}
+          />
+          <SummaryCard
+            label="Gained / New"
+            value={`+${formatUsd(changeSummary.totalIn)} (${changeSummary.inflow})`}
+            color="#4caf50"
+          />
+          <SummaryCard
+            label="Lost / Removed"
+            value={`-${formatUsd(changeSummary.totalOut)} (${changeSummary.outflow})`}
+            color="#f44336"
+          />
         </div>
       )}
 
@@ -773,7 +633,51 @@ export default function Holdings({ walletId }: { walletId: number | null }) {
                   {/* Expanded Details */}
                   {isExpanded && (
                     <div style={{ padding: '0 1rem 1rem', borderTop: '1px solid #333' }}>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', paddingTop: '1rem' }}>
+                      {/* Position Changes */}
+                      {change && (
+                        <div style={{ padding: '1rem 0', borderBottom: '1px solid #333', marginBottom: '1rem' }}>
+                          <div style={{ fontSize: '0.75rem', color: '#888', textTransform: 'uppercase', marginBottom: '0.75rem' }}>
+                            Position Changes
+                            <span style={{
+                              marginLeft: '0.5rem',
+                              fontSize: '0.7rem',
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              background: `${getChangeColor(change.direction)}22`,
+                              color: getChangeColor(change.direction),
+                              fontWeight: 600,
+                            }}>
+                              {getChangeLabel(change.direction)}
+                            </span>
+                          </div>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '1rem' }}>
+                            <div>
+                              <div style={{ fontSize: '0.75rem', color: '#888' }}>Previous</div>
+                              <div style={{ fontSize: '0.875rem', color: '#ccc' }}>
+                                {toNum(change.previous_amount) > 0 ? formatAmount(change.previous_amount) : '-'}
+                              </div>
+                            </div>
+                            <div>
+                              <div style={{ fontSize: '0.75rem', color: '#888' }}>Current</div>
+                              <div style={{ fontSize: '0.875rem', color: '#ccc' }}>{formatAmount(change.current_amount)}</div>
+                            </div>
+                            <div>
+                              <div style={{ fontSize: '0.75rem', color: '#888' }}>Change</div>
+                              <div style={{ fontSize: '0.875rem', color: getChangeColor(change.direction) }}>
+                                {toNum(change.change_amount) > 0 ? '+' : ''}{formatAmount(change.change_amount)}
+                              </div>
+                            </div>
+                            <div>
+                              <div style={{ fontSize: '0.75rem', color: '#888' }}>Value Impact</div>
+                              <div style={{ fontSize: '0.875rem', color: getChangeColor(change.direction), fontWeight: 600 }}>
+                                {toNum(change.change_value_usd) > 0 ? '+' : ''}{formatUsd(change.change_value_usd)}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
                         <div>
                           <div style={{ fontSize: '0.75rem', color: '#888', marginBottom: '0.25rem' }}>Full Mint Address</div>
                           <div style={{ fontSize: '0.875rem', color: '#ccc', wordBreak: 'break-all' }}>{h.mint}</div>
