@@ -36,13 +36,7 @@ interface HoldingsResponse {
 function AxiomLink({ mint, children }: { mint: string; children: React.ReactNode }) {
   const url = `https://axiom.trade/meme/${mint}?chain=sol`;
   return (
-    <a
-      href={url}
-      target="_blank"
-      rel="noopener noreferrer"
-      style={{ color: '#7c4dff', textDecoration: 'none' }}
-      onClick={e => e.stopPropagation()}
-    >
+    <a href={url} target="_blank" rel="noopener noreferrer" style={{ color: '#7c4dff', textDecoration: 'none' }} onClick={e => e.stopPropagation()}>
       {children}
     </a>
   );
@@ -51,13 +45,7 @@ function AxiomLink({ mint, children }: { mint: string; children: React.ReactNode
 function SolscanLink({ mint, children }: { mint: string; children: React.ReactNode }) {
   const url = `https://solscan.io/token/${mint}`;
   return (
-    <a
-      href={url}
-      target="_blank"
-      rel="noopener noreferrer"
-      style={{ color: '#14f195', textDecoration: 'none' }}
-      onClick={e => e.stopPropagation()}
-    >
+    <a href={url} target="_blank" rel="noopener noreferrer" style={{ color: '#14f195', textDecoration: 'none' }} onClick={e => e.stopPropagation()}>
       {children}
     </a>
   );
@@ -107,6 +95,31 @@ export default function Holdings({ walletId }: { walletId: number | null }) {
   useEffect(() => {
     fetchData();
   }, [walletId]);
+
+  // Build a map of current holdings by mint for quick lookup
+  const currentByMint = useMemo(() => {
+    const map = new Map<string, HoldingItem>();
+    data?.items?.forEach(h => map.set(h.mint, h));
+    return map;
+  }, [data]);
+
+  // Build a map of changes by mint
+  const changesByMint = useMemo(() => {
+    const map = new Map<string, HoldingChange>();
+    data?.changes?.forEach(c => map.set(c.mint, c));
+    return map;
+  }, [data]);
+
+  // Group changes by direction for summary
+  const changeSummary = useMemo(() => {
+    if (!data?.changes) return null;
+    const inflow = data.changes.filter(c => c.direction === 'inflow' || c.direction === 'new');
+    const outflow = data.changes.filter(c => c.direction === 'outflow' || c.direction === 'removed');
+    const totalIn = inflow.reduce((s, c) => s + toNum(c.change_value_usd), 0);
+    const totalOut = outflow.reduce((s, c) => s + toNum(c.change_value_usd), 0);
+    const netChange = totalIn - totalOut;
+    return { inflow: inflow.length, outflow: outflow.length, totalIn, totalOut, netChange };
+  }, [data]);
 
   const displayHoldings = useMemo(() => {
     if (!data || !Array.isArray(data.items)) return [];
@@ -159,30 +172,26 @@ export default function Holdings({ walletId }: { walletId: number | null }) {
 
   const getChangeColor = (direction: string) => {
     switch (direction) {
-      case 'inflow': return '#4caf50';
-      case 'outflow': return '#f44336';
-      case 'new': return '#2196f3';
-      case 'removed': return '#ff9800';
+      case 'inflow':
+      case 'new': return '#4caf50';
+      case 'outflow':
+      case 'removed': return '#f44336';
       default: return '#888';
     }
   };
 
-  const getChangeIcon = (direction: string) => {
+  const getChangeLabel = (direction: string) => {
     switch (direction) {
-      case 'inflow': return '↑';
-      case 'outflow': return '↓';
-      case 'new': return '✦';
-      case 'removed': return '✗';
-      default: return '→';
+      case 'inflow': return 'Increased';
+      case 'outflow': return 'Decreased';
+      case 'new': return 'New Position';
+      case 'removed': return 'Removed';
+      default: return 'Changed';
     }
   };
 
   if (!walletId) {
-    return (
-      <div style={{ textAlign: 'center', padding: '2rem', color: '#666' }}>
-        Select a wallet to view holdings
-      </div>
-    );
+    return <div style={{ textAlign: 'center', padding: '2rem', color: '#666' }}>Select a wallet to view holdings</div>;
   }
 
   if (loading && !data) {
@@ -193,7 +202,7 @@ export default function Holdings({ walletId }: { walletId: number | null }) {
 
   return (
     <div>
-      {/* Header with refresh */}
+      {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
         <div>
           <div style={{ fontSize: '0.75rem', color: '#888' }}>
@@ -218,7 +227,7 @@ export default function Holdings({ walletId }: { walletId: number | null }) {
               fontSize: '0.875rem',
             }}
           >
-            Changes {data && data.changes?.length > 0 && `(${data.changes.length})`}
+            Changes {data?.changes && data.changes.length > 0 && `(${data.changes.length})`}
           </button>
           <button
             onClick={doRefresh}
@@ -238,57 +247,168 @@ export default function Holdings({ walletId }: { walletId: number | null }) {
         </div>
       </div>
 
-      {/* Changes Panel — show even if holdings are empty */}
+      {/* Changes Panel — grouped by token */}
       {showChanges && data?.changes && data.changes.length > 0 && (
-        <div style={{ background: '#1a1a1a', borderRadius: '8px', padding: '1rem', marginBottom: '1.5rem' }}>
-          <div style={{ fontSize: '0.875rem', color: '#888', marginBottom: '0.75rem', fontWeight: 600 }}>
-            Changes Since Last Snapshot
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            {data.changes.map(change => (
-              <div
-                key={change.mint}
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: '30px 1fr 120px 120px',
-                  gap: '1rem',
-                  alignItems: 'center',
-                  padding: '0.5rem 0.75rem',
-                  background: '#252525',
-                  borderRadius: '6px',
-                  fontSize: '0.875rem',
-                }}
-              >
-                <span style={{ color: getChangeColor(change.direction), fontWeight: 600 }}>
-                  {getChangeIcon(change.direction)}
-                </span>
-                <div>
-                  <AxiomLink mint={change.mint}>
-                    <span style={{ fontWeight: 500, color: '#e0e0e0' }}>{change.symbol}</span>
-                  </AxiomLink>
-                  <span style={{ color: '#555', fontSize: '0.75rem', marginLeft: '0.5rem' }}>
-                    {change.direction}
-                  </span>
-                </div>
-                <div style={{ textAlign: 'right', color: getChangeColor(change.direction) }}>
-                  {toNum(change.change_amount) > 0 ? '+' : ''}{formatAmount(change.change_amount, 6)}
-                </div>
-                <div style={{ textAlign: 'right', color: getChangeColor(change.direction) }}>
-                  {change.change_value_usd !== null && (
-                    <span>
-                      {toNum(change.change_value_usd) > 0 ? '+' : ''}{formatUsd(change.change_value_usd)}
-                    </span>
+        <div style={{ marginBottom: '1.5rem' }}>
+          {/* Summary bar */}
+          {changeSummary && (
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+              gap: '0.75rem',
+              marginBottom: '1rem',
+            }}>
+              <SummaryCard
+                label="Net Change"
+                value={formatUsd(changeSummary.netChange)}
+                color={changeSummary.netChange >= 0 ? '#4caf50' : '#f44336'}
+              />
+              <SummaryCard
+                label="Gained / New"
+                value={`+${formatUsd(changeSummary.totalIn)} (${changeSummary.inflow})`}
+                color="#4caf50"
+              />
+              <SummaryCard
+                label="Lost / Removed"
+                value={`-${formatUsd(changeSummary.totalOut)} (${changeSummary.outflow})`}
+                color="#f44336"
+              />
+            </div>
+          )}
+
+          {/* Token change cards */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            {data.changes.map(change => {
+              const current = currentByMint.get(change.mint);
+              const isExpanded = expandedMint === change.mint;
+              const changeColor = getChangeColor(change.direction);
+              const prevAmt = toNum(change.previous_amount);
+              const currAmt = toNum(change.current_amount);
+              const changeAmt = toNum(change.change_amount);
+              const changeVal = toNum(change.change_value_usd);
+
+              return (
+                <div
+                  key={change.mint}
+                  style={{
+                    background: '#1a1a1a',
+                    borderRadius: '8px',
+                    border: `1px solid ${changeColor}33`,
+                    overflow: 'hidden',
+                  }}
+                >
+                  {/* Main row */}
+                  <div
+                    onClick={() => setExpandedMint(isExpanded ? null : change.mint)}
+                    style={{
+                      padding: '1rem',
+                      display: 'grid',
+                      gridTemplateColumns: '1fr 1fr 1fr 120px',
+                      gap: '1rem',
+                      alignItems: 'center',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <AxiomLink mint={change.mint}>
+                          <span style={{ fontWeight: 600, fontSize: '1rem', color: '#e0e0e0' }}>{change.symbol}</span>
+                        </AxiomLink>
+                        <span style={{
+                          fontSize: '0.7rem',
+                          padding: '2px 8px',
+                          borderRadius: '4px',
+                          background: `${changeColor}22`,
+                          color: changeColor,
+                          fontWeight: 600,
+                        }}>
+                          {getChangeLabel(change.direction)}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: '#555', marginTop: '0.25rem' }}>
+                        <SolscanLink mint={change.mint}>
+                          {change.mint.slice(0, 8)}...{change.mint.slice(-4)}
+                        </SolscanLink>
+                      </div>
+                    </div>
+
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: '0.75rem', color: '#666' }}>Amount</div>
+                      <div style={{ fontWeight: 500, color: '#e0e0e0' }}>
+                        {prevAmt > 0 ? (
+                          <span>
+                            {formatAmount(prevAmt)} → {formatAmount(currAmt)}
+                          </span>
+                        ) : (
+                          <span>{formatAmount(currAmt)}</span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: '0.75rem', color: '#666' }}>Value Impact</div>
+                      <div style={{ fontWeight: 600, color: changeColor }}>
+                        {changeVal > 0 ? '+' : ''}{formatUsd(change.change_value_usd)}
+                      </div>
+                    </div>
+
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: '0.75rem', color: '#666' }}>Current</div>
+                      <div style={{ fontWeight: 500, color: '#e0e0e0' }}>
+                        {current ? formatUsd(current.value_usd) : '$0'}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Expanded details */}
+                  {isExpanded && (
+                    <div style={{ padding: '0 1rem 1rem', borderTop: '1px solid #333' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem', paddingTop: '1rem' }}>
+                        <div>
+                          <div style={{ fontSize: '0.75rem', color: '#888' }}>Previous Amount</div>
+                          <div style={{ fontSize: '0.875rem', color: '#ccc' }}>{formatAmount(change.previous_amount)}</div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '0.75rem', color: '#888' }}>Current Amount</div>
+                          <div style={{ fontSize: '0.875rem', color: '#ccc' }}>{formatAmount(change.current_amount)}</div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '0.75rem', color: '#888' }}>Change</div>
+                          <div style={{ fontSize: '0.875rem', color: changeColor }}>
+                            {changeAmt > 0 ? '+' : ''}{formatAmount(change.change_amount)}
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '0.75rem', color: '#888' }}>Value Impact</div>
+                          <div style={{ fontSize: '0.875rem', color: changeColor }}>
+                            {changeVal > 0 ? '+' : ''}{formatUsd(change.change_value_usd)}
+                          </div>
+                        </div>
+                        {current && (
+                          <>
+                            <div>
+                              <div style={{ fontSize: '0.75rem', color: '#888' }}>Current Price</div>
+                              <div style={{ fontSize: '0.875rem', color: '#ccc' }}>{formatUsd(current.price_usd)}</div>
+                            </div>
+                            <div>
+                              <div style={{ fontSize: '0.75rem', color: '#888' }}>Current Value</div>
+                              <div style={{ fontSize: '0.875rem', color: '#ccc' }}>{formatUsd(current.value_usd)}</div>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
                   )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
 
-      {/* Empty state — show below changes/stats so user can still see what happened */}
+      {/* Empty state */}
       {isEmpty && (
-        <div style={{ textAlign: 'center', padding: '2rem', color: '#666', background: '#1a1a1a', borderRadius: '8px' }}>
+        <div style={{ textAlign: 'center', padding: '2rem', color: '#666', background: '#1a1a1a', borderRadius: '8px', marginBottom: '1.5rem' }}>
           No current holdings — portfolio is empty
           {data && (
             <div style={{ fontSize: '0.75rem', color: '#555', marginTop: '0.5rem' }}>
@@ -326,11 +446,7 @@ export default function Holdings({ walletId }: { walletId: number | null }) {
                   return (
                     <div
                       key={h.mint}
-                      style={{
-                        width: `${pct}%`,
-                        background: getAllocationColor(i),
-                        transition: 'width 0.3s',
-                      }}
+                      style={{ width: `${pct}%`, background: getAllocationColor(i), transition: 'width 0.3s' }}
                       title={`${h.symbol}: ${formatUsd(h.value_usd)} (${pct.toFixed(1)}%)`}
                     />
                   );
@@ -377,6 +493,7 @@ export default function Holdings({ walletId }: { walletId: number | null }) {
               const pct = totalValue > 0 && toNum(h.value_usd) ? (toNum(h.value_usd) / totalValue) * 100 : 0;
               const isExpanded = expandedMint === h.mint;
               const isSol = h.mint === 'So11111111111111111111111111111111111111112';
+              const change = changesByMint.get(h.mint);
 
               return (
                 <div
@@ -409,6 +526,18 @@ export default function Holdings({ walletId }: { walletId: number | null }) {
                           {h.name}
                         </span>
                         {isSol && <span style={{ fontSize: '0.625rem', background: '#14f19533', color: '#14f195', padding: '1px 6px', borderRadius: '4px' }}>SOL</span>}
+                        {change && (
+                          <span style={{
+                            fontSize: '0.7rem',
+                            padding: '1px 6px',
+                            borderRadius: '4px',
+                            background: `${getChangeColor(change.direction)}22`,
+                            color: getChangeColor(change.direction),
+                          }}>
+                            {change.direction === 'inflow' || change.direction === 'new' ? '↑' : '↓'}
+                            {formatUsd(change.change_value_usd)}
+                          </span>
+                        )}
                       </div>
                       <div style={{ fontSize: '0.75rem', color: '#555', marginTop: '0.25rem' }}>
                         <SolscanLink mint={h.mint}>
@@ -506,14 +635,18 @@ export default function Holdings({ walletId }: { walletId: number | null }) {
 
 function StatCard({ title, value, color }: { title: string; value: string; color: string }) {
   return (
-    <div style={{
-      background: '#1a1a1a',
-      borderRadius: '8px',
-      padding: '1rem',
-      borderLeft: `3px solid ${color}`,
-    }}>
+    <div style={{ background: '#1a1a1a', borderRadius: '8px', padding: '1rem', borderLeft: `3px solid ${color}` }}>
       <div style={{ fontSize: '0.75rem', color: '#888', textTransform: 'uppercase', marginBottom: '0.25rem' }}>{title}</div>
       <div style={{ fontSize: '1.25rem', fontWeight: 600, color }}>{value}</div>
+    </div>
+  );
+}
+
+function SummaryCard({ label, value, color }: { label: string; value: string; color: string }) {
+  return (
+    <div style={{ background: '#1a1a1a', borderRadius: '8px', padding: '0.75rem 1rem', border: `1px solid ${color}33` }}>
+      <div style={{ fontSize: '0.75rem', color: '#888', marginBottom: '0.25rem' }}>{label}</div>
+      <div style={{ fontSize: '1.1rem', fontWeight: 600, color }}>{value}</div>
     </div>
   );
 }
