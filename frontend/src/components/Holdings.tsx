@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { holdings as holdingsApi, transactions as txApi } from '../api/client';
+import { holdings as holdingsApi } from '../api/client';
 
 interface HoldingItem {
   mint: string;
@@ -64,11 +64,6 @@ export default function Holdings({ walletId }: { walletId: number | null }) {
   const [refreshing, setRefreshing] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedMint, setExpandedMint] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<'snapshot' | 'daily'>('snapshot');
-  const [dailyData, setDailyData] = useState<any>(null);
-  const [dailyLoading, setDailyLoading] = useState(false);
-  const [dailyDays, setDailyDays] = useState(7);
-  const [expandedDay, setExpandedDay] = useState<string | null>(null);
 
   const fetchData = async (forceRefresh = false) => {
     if (!walletId) return;
@@ -97,37 +92,18 @@ export default function Holdings({ walletId }: { walletId: number | null }) {
     }
   };
 
-  const fetchDailyData = async () => {
-    if (!walletId) return;
-    setDailyLoading(true);
-    try {
-      const result = await txApi.dailySummary(walletId, dailyDays);
-      setDailyData(result);
-    } catch (err) {
-      console.error('Failed to fetch daily summary:', err);
-    } finally {
-      setDailyLoading(false);
-    }
-  };
-
   useEffect(() => {
     fetchData();
   }, [walletId]);
 
-  useEffect(() => {
-    if (viewMode === 'daily') {
-      fetchDailyData();
-    }
-  }, [walletId, viewMode, dailyDays]);
-
-  // Build a map of changes by mint (using day changes for persistent indicators)
+  // Build a map of day changes by mint for New/Sold badges
   const changesByMint = useMemo(() => {
     const map = new Map<string, HoldingChange>();
     data?.day_changes?.forEach(c => map.set(c.mint, c));
     return map;
   }, [data]);
 
-  // Group changes by direction for summary (use day changes for daily summary)
+  // Group changes by direction for summary
   const changeSummary = useMemo(() => {
     if (!data?.day_changes) return null;
     const inflow = data.day_changes.filter(c => c.direction === 'inflow' || c.direction === 'new');
@@ -187,6 +163,26 @@ export default function Holdings({ walletId }: { walletId: number | null }) {
     return colors[index % colors.length];
   };
 
+  const getChangeColor = (direction: string) => {
+    switch (direction) {
+      case 'inflow':
+      case 'new': return '#4caf50';
+      case 'outflow':
+      case 'removed': return '#f44336';
+      default: return '#888';
+    }
+  };
+
+  const getChangeLabel = (direction: string) => {
+    switch (direction) {
+      case 'inflow': return 'Increased';
+      case 'outflow': return 'Decreased';
+      case 'new': return 'New Position';
+      case 'removed': return 'Sold';
+      default: return 'Changed';
+    }
+  };
+
   if (!walletId) {
     return <div style={{ textAlign: 'center', padding: '2rem', color: '#666' }}>Select a wallet to view holdings</div>;
   }
@@ -211,56 +207,25 @@ export default function Holdings({ walletId }: { walletId: number | null }) {
             )}
           </div>
         </div>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <div style={{ display: 'flex', borderRadius: '6px', overflow: 'hidden', border: '1px solid #333' }}>
-            <button
-              onClick={() => setViewMode('snapshot')}
-              style={{
-                padding: '0.5rem 1rem',
-                border: 'none',
-                background: viewMode === 'snapshot' ? '#7c4dff33' : '#1a1a1a',
-                color: viewMode === 'snapshot' ? '#7c4dff' : '#888',
-                cursor: 'pointer',
-                fontSize: '0.875rem',
-              }}
-            >
-              Snapshot
-            </button>
-            <button
-              onClick={() => setViewMode('daily')}
-              style={{
-                padding: '0.5rem 1rem',
-                border: 'none',
-                borderLeft: '1px solid #333',
-                background: viewMode === 'daily' ? '#7c4dff33' : '#1a1a1a',
-                color: viewMode === 'daily' ? '#7c4dff' : '#888',
-                cursor: 'pointer',
-                fontSize: '0.875rem',
-              }}
-            >
-              Daily
-            </button>
-          </div>
-          <button
-            onClick={doRefresh}
-            disabled={refreshing}
-            style={{
-              padding: '0.5rem 1rem',
-              borderRadius: '6px',
-              border: '1px solid #333',
-              background: '#1a1a1a',
-              color: refreshing ? '#555' : '#e0e0e0',
-              cursor: refreshing ? 'not-allowed' : 'pointer',
-              fontSize: '0.875rem',
-            }}
-          >
-            {refreshing ? 'Refreshing...' : '⟳ Refresh'}
-          </button>
-        </div>
+        <button
+          onClick={doRefresh}
+          disabled={refreshing}
+          style={{
+            padding: '0.5rem 1rem',
+            borderRadius: '6px',
+            border: '1px solid #333',
+            background: '#1a1a1a',
+            color: refreshing ? '#555' : '#e0e0e0',
+            cursor: refreshing ? 'not-allowed' : 'pointer',
+            fontSize: '0.875rem',
+          }}
+        >
+          {refreshing ? 'Refreshing...' : '⟳ Refresh'}
+        </button>
       </div>
 
-      {/* Snapshot Summary Bar */}
-      {viewMode === 'snapshot' && data?.changes && data.changes.length > 0 && changeSummary && (
+      {/* Day Change Summary Bar */}
+      {data?.day_changes && data.day_changes.length > 0 && changeSummary && (
         <div style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
@@ -278,163 +243,13 @@ export default function Holdings({ walletId }: { walletId: number | null }) {
             color="#4caf50"
           />
           <SummaryCard
-            label="Lost / Removed"
+            label="Lost / Sold"
             value={`-${formatUsd(changeSummary.totalOut)} (${changeSummary.outflow})`}
             color="#f44336"
           />
         </div>
       )}
 
-      {/* Daily Activity Panel */}
-      {viewMode === 'daily' && (
-        <div style={{ marginBottom: '1.5rem' }}>
-          {/* Days selector */}
-          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
-            {[7, 14, 30].map(days => (
-              <button
-                key={days}
-                onClick={() => setDailyDays(days)}
-                style={{
-                  padding: '0.375rem 0.75rem',
-                  borderRadius: '4px',
-                  border: '1px solid #333',
-                  background: dailyDays === days ? '#7c4dff33' : '#1a1a1a',
-                  color: dailyDays === days ? '#7c4dff' : '#888',
-                  cursor: 'pointer',
-                  fontSize: '0.8rem',
-                }}
-              >
-                {days} days
-              </button>
-            ))}
-          </div>
-
-          {dailyLoading && <div style={{ color: '#888', padding: '1rem' }}>Loading daily summary...</div>}
-
-          {!dailyLoading && dailyData?.daily?.length === 0 && (
-            <div style={{ textAlign: 'center', padding: '2rem', color: '#666', background: '#1a1a1a', borderRadius: '8px' }}>
-              No activity in the last {dailyDays} days
-            </div>
-          )}
-
-          {!dailyLoading && dailyData?.daily?.map((day: any) => {
-            const isExpanded = expandedDay === day.date;
-            const netColor = day.net_usd >= 0 ? '#4caf50' : '#f44336';
-
-            return (
-              <div
-                key={day.date}
-                style={{
-                  background: '#1a1a1a',
-                  borderRadius: '8px',
-                  marginBottom: '0.75rem',
-                  overflow: 'hidden',
-                }}
-              >
-                {/* Day header */}
-                <div
-                  onClick={() => setExpandedDay(isExpanded ? null : day.date)}
-                  style={{
-                    padding: '1rem',
-                    display: 'grid',
-                    gridTemplateColumns: '1fr 1fr 1fr 1fr 120px',
-                    gap: '1rem',
-                    alignItems: 'center',
-                    cursor: 'pointer',
-                  }}
-                >
-                  <div>
-                    <div style={{ fontWeight: 600, color: '#e0e0e0' }}>
-                      {new Date(day.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
-                    </div>
-                    <div style={{ fontSize: '0.75rem', color: '#555' }}>{day.date}</div>
-                  </div>
-
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontSize: '0.75rem', color: '#888' }}>Sold</div>
-                    <div style={{ color: '#f44336', fontWeight: 500 }}>
-                      {day.sell.count > 0 ? `${formatUsd(day.sell.usd)} (${day.sell.count})` : '-'}
-                    </div>
-                  </div>
-
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontSize: '0.75rem', color: '#888' }}>Bought</div>
-                    <div style={{ color: '#4caf50', fontWeight: 500 }}>
-                      {day.buy.count > 0 ? `${formatUsd(day.buy.usd)} (${day.buy.count})` : '-'}
-                    </div>
-                  </div>
-
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontSize: '0.75rem', color: '#888' }}>Transfers</div>
-                    <div style={{ color: '#888', fontWeight: 500 }}>
-                      {day.transfer_in.count + day.transfer_out.count > 0
-                        ? `In: ${formatUsd(day.transfer_in.usd)} / Out: ${formatUsd(day.transfer_out.usd)}`
-                        : '-'}
-                    </div>
-                  </div>
-
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontSize: '0.75rem', color: '#888' }}>Net</div>
-                    <div style={{ fontWeight: 600, color: netColor }}>
-                      {day.net_usd >= 0 ? '+' : ''}{formatUsd(day.net_usd)}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Expanded token breakdown */}
-                {isExpanded && day.tokens.length > 0 && (
-                  <div style={{ padding: '0 1rem 1rem', borderTop: '1px solid #333' }}>
-                    <div style={{ paddingTop: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                      {day.tokens.map((token: any) => {
-                        const tokenColor = token.type === 'sell' || token.type === 'transfer_out' ? '#f44336' : '#4caf50';
-                        return (
-                          <div
-                            key={`${token.mint}-${token.type}`}
-                            style={{
-                              display: 'grid',
-                              gridTemplateColumns: '1fr 80px 100px 100px',
-                              gap: '1rem',
-                              alignItems: 'center',
-                              padding: '0.5rem 0.75rem',
-                              background: '#252525',
-                              borderRadius: '6px',
-                              fontSize: '0.875rem',
-                            }}
-                          >
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                              <AxiomLink mint={token.mint}>
-                                <span style={{ fontWeight: 500, color: '#e0e0e0' }}>{token.symbol}</span>
-                              </AxiomLink>
-                              <span style={{
-                                fontSize: '0.7rem',
-                                padding: '1px 6px',
-                                borderRadius: '4px',
-                                background: `${tokenColor}22`,
-                                color: tokenColor,
-                              }}>
-                                {token.type}
-                              </span>
-                            </div>
-                            <div style={{ textAlign: 'right', color: '#888' }}>
-                              {token.count} tx
-                            </div>
-                            <div style={{ textAlign: 'right', color: tokenColor, fontWeight: 500 }}>
-                              {formatUsd(token.usd)}
-                            </div>
-                            <div style={{ textAlign: 'right', color: '#888' }}>
-                              {formatAmount(token.amount, 4)} {token.symbol}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
       {isEmpty && (
         <div style={{ textAlign: 'center', padding: '2rem', color: '#666', background: '#1a1a1a', borderRadius: '8px', marginBottom: '1.5rem' }}>
           No current holdings — portfolio is empty
@@ -624,7 +439,51 @@ export default function Holdings({ walletId }: { walletId: number | null }) {
                   {/* Expanded Details */}
                   {isExpanded && (
                     <div style={{ padding: '0 1rem 1rem', borderTop: '1px solid #333' }}>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', paddingTop: '1rem' }}>
+                      {/* Position Changes */}
+                      {change && (
+                        <div style={{ padding: '1rem 0', borderBottom: '1px solid #333', marginBottom: '1rem' }}>
+                          <div style={{ fontSize: '0.75rem', color: '#888', textTransform: 'uppercase', marginBottom: '0.75rem' }}>
+                            Position Changes
+                            <span style={{
+                              marginLeft: '0.5rem',
+                              fontSize: '0.7rem',
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              background: `${getChangeColor(change.direction)}22`,
+                              color: getChangeColor(change.direction),
+                              fontWeight: 600,
+                            }}>
+                              {getChangeLabel(change.direction)}
+                            </span>
+                          </div>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '1rem' }}>
+                            <div>
+                              <div style={{ fontSize: '0.75rem', color: '#888' }}>Previous</div>
+                              <div style={{ fontSize: '0.875rem', color: '#ccc' }}>
+                                {toNum(change.previous_amount) > 0 ? formatAmount(change.previous_amount) : '-'}
+                              </div>
+                            </div>
+                            <div>
+                              <div style={{ fontSize: '0.75rem', color: '#888' }}>Current</div>
+                              <div style={{ fontSize: '0.875rem', color: '#ccc' }}>{formatAmount(change.current_amount)}</div>
+                            </div>
+                            <div>
+                              <div style={{ fontSize: '0.75rem', color: '#888' }}>Change</div>
+                              <div style={{ fontSize: '0.875rem', color: getChangeColor(change.direction) }}>
+                                {toNum(change.change_amount) > 0 ? '+' : ''}{formatAmount(change.change_amount)}
+                              </div>
+                            </div>
+                            <div>
+                              <div style={{ fontSize: '0.75rem', color: '#888' }}>Value Impact</div>
+                              <div style={{ fontSize: '0.875rem', color: getChangeColor(change.direction), fontWeight: 600 }}>
+                                {toNum(change.change_value_usd) > 0 ? '+' : ''}{formatUsd(change.change_value_usd)}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
                         <div>
                           <div style={{ fontSize: '0.75rem', color: '#888', marginBottom: '0.25rem' }}>Full Mint Address</div>
                           <div style={{ fontSize: '0.875rem', color: '#ccc', wordBreak: 'break-all' }}>{h.mint}</div>
@@ -633,6 +492,14 @@ export default function Holdings({ walletId }: { walletId: number | null }) {
                           <div style={{ fontSize: '0.75rem', color: '#888', marginBottom: '0.25rem' }}>Raw Amount</div>
                           <div style={{ fontSize: '0.875rem', color: '#ccc' }}>{toNum(h.amount).toLocaleString('en-US', { maximumFractionDigits: h.decimals })}</div>
                         </div>
+                        {h.pool_address && (
+                          <div>
+                            <div style={{ fontSize: '0.75rem', color: '#888', marginBottom: '0.25rem' }}>Pool Address</div>
+                            <div style={{ fontSize: '0.875rem', color: '#ccc', wordBreak: 'break-all' }}>
+                              <AxiomLink mint={h.pool_address}>{h.pool_address}</AxiomLink>
+                            </div>
+                          </div>
+                        )}
                         <div>
                           <div style={{ fontSize: '0.75rem', color: '#888', marginBottom: '0.25rem' }}>Links</div>
                           <div style={{ display: 'flex', gap: '0.5rem' }}>

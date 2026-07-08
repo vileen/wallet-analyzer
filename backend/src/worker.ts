@@ -25,7 +25,31 @@ export function startWorker(): void {
     }
   });
 
-  console.log('[Worker] Started - polling every 15 minutes');
+  // Daily baseline snapshot at 00:01 for clean day-over-day comparison
+  cron.schedule('1 0 * * *', async () => {
+    console.log('[Worker] Running daily baseline snapshot...');
+    try {
+      await takeDailyBaselineSnapshots();
+    } catch (error) {
+      console.error('[Worker] Daily baseline snapshot error:', error);
+    }
+  });
+
+  console.log('[Worker] Started - polling every 15 minutes, daily baseline at 00:01');
+}
+
+async function takeDailyBaselineSnapshots(): Promise<void> {
+  const wallets = await query('SELECT * FROM wallets WHERE is_active = true');
+  if (wallets.rows.length === 0) return;
+
+  for (const wallet of wallets.rows) {
+    try {
+      await saveHoldingsSnapshot(wallet.id, wallet.address);
+      console.log(`[Worker] Daily baseline snapshot for ${wallet.label || wallet.address}`);
+    } catch (error) {
+      console.error(`[Worker] Failed daily baseline for ${wallet.address}:`, error);
+    }
+  }
 }
 
 async function processWallets(): Promise<void> {
