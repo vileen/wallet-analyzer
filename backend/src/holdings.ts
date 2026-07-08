@@ -229,6 +229,34 @@ export async function getDayStartSnapshot(walletId: number): Promise<HoldingSnap
   };
 }
 
+// ── DB: get baseline snapshot N days ago ──────────────────────────
+
+export async function getBaselineSnapshot(walletId: number, daysAgo: number): Promise<HoldingSnapshot | null> {
+  const snapshotResult = await query(
+    `SELECT id, wallet_id, snapshot_at, total_value_usd, sol_balance
+     FROM holdings_snapshots
+     WHERE wallet_id = $1 AND snapshot_at >= NOW() - INTERVAL '${daysAgo} days'
+     ORDER BY snapshot_at ASC
+     LIMIT 1`,
+    [walletId]
+  );
+  if (snapshotResult.rows.length === 0) return null;
+
+  const snapshot = snapshotResult.rows[0];
+  const itemsResult = await query(
+    `SELECT mint, symbol, name, decimals, amount, price_usd, value_usd, pool_address
+     FROM holdings_items
+     WHERE snapshot_id = $1
+     ORDER BY value_usd DESC NULLS LAST`,
+    [snapshot.id]
+  );
+
+  return {
+    ...snapshot,
+    items: itemsResult.rows,
+  };
+}
+
 // ── Compute changes between two snapshots ───────────────────────────
 
 export function computeHoldingChanges(

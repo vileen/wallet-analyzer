@@ -39,12 +39,17 @@ export const wallets = {
 };
 
 export const holdings = {
-  get: (walletId: number, params?: { refresh?: string }) => {
+  get: (walletId: number, params?: { refresh?: string; compare?: string }) => {
     const qs = new URLSearchParams();
     if (params?.refresh) qs.set('refresh', params.refresh);
+    if (params?.compare) qs.set('compare', params.compare);
     return api(`/api/holdings/${walletId}?${qs}`);
   },
-  refresh: (walletId: number) => api(`/api/holdings/${walletId}/refresh`, { method: 'POST' }),
+  refresh: (walletId: number, params?: { compare?: string }) => {
+    const qs = new URLSearchParams();
+    if (params?.compare) qs.set('compare', params.compare);
+    return api(`/api/holdings/${walletId}/refresh?${qs}`, { method: 'POST' });
+  },
 };
 
 export const transactions = {

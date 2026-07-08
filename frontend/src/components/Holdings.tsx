@@ -30,7 +30,9 @@ interface HoldingsResponse {
   sol_balance: number | string | null;
   items: HoldingItem[];
   changes: HoldingChange[];
-  day_changes: HoldingChange[];
+  baseline_changes: HoldingChange[];
+  baseline_days: number;
+  baseline_snapshot_at: string | null;
   previous_snapshot_at: string | null;
 }
 
@@ -64,12 +66,15 @@ export default function Holdings({ walletId }: { walletId: number | null }) {
   const [refreshing, setRefreshing] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedMint, setExpandedMint] = useState<string | null>(null);
+  const [compareDays, setCompareDays] = useState(1);
 
   const fetchData = async (forceRefresh = false) => {
     if (!walletId) return;
     setLoading(true);
     try {
-      const params = forceRefresh ? { refresh: 'true' } : {};
+      const params: { refresh?: string; compare?: string } = {};
+      if (forceRefresh) params.refresh = 'true';
+      params.compare = String(compareDays);
       const result = await holdingsApi.get(walletId, params);
       setData(result);
     } catch (err) {
@@ -83,7 +88,7 @@ export default function Holdings({ walletId }: { walletId: number | null }) {
     if (!walletId) return;
     setRefreshing(true);
     try {
-      const result = await holdingsApi.refresh(walletId);
+      const result = await holdingsApi.refresh(walletId, { compare: String(compareDays) });
       setData(result);
     } catch (err) {
       console.error('Refresh failed:', err);
@@ -94,20 +99,20 @@ export default function Holdings({ walletId }: { walletId: number | null }) {
 
   useEffect(() => {
     fetchData();
-  }, [walletId]);
+  }, [walletId, compareDays]);
 
-  // Build a map of day changes by mint for New/Sold badges
+  // Build a map of baseline changes by mint for New/Sold badges
   const changesByMint = useMemo(() => {
     const map = new Map<string, HoldingChange>();
-    data?.day_changes?.forEach(c => map.set(c.mint, c));
+    data?.baseline_changes?.forEach(c => map.set(c.mint, c));
     return map;
   }, [data]);
 
   // Group changes by direction for summary
   const changeSummary = useMemo(() => {
-    if (!data?.day_changes) return null;
-    const inflow = data.day_changes.filter(c => c.direction === 'inflow' || c.direction === 'new');
-    const outflow = data.day_changes.filter(c => c.direction === 'outflow' || c.direction === 'removed');
+    if (!data?.baseline_changes) return null;
+    const inflow = data.baseline_changes.filter(c => c.direction === 'inflow' || c.direction === 'new');
+    const outflow = data.baseline_changes.filter(c => c.direction === 'outflow' || c.direction === 'removed');
     const totalIn = inflow.reduce((s, c) => s + toNum(c.change_value_usd), 0);
     const totalOut = outflow.reduce((s, c) => s + toNum(c.change_value_usd), 0);
     const netChange = totalIn - totalOut;
@@ -193,39 +198,67 @@ export default function Holdings({ walletId }: { walletId: number | null }) {
 
   const isEmpty = !data || !Array.isArray(data.items) || data.items.length === 0;
 
+  const compareLabel = compareDays === 1 ? 'Today' : `${compareDays} days`;
+
   return (
     <div>
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
         <div>
           <div style={{ fontSize: '0.75rem', color: '#888' }}>
-            Last updated: {data ? new Date(data.snapshot_at).toLocaleString() : '-'}
-            {data?.previous_snapshot_at && (
-              <span style={{ marginLeft: '0.5rem', color: '#555' }}>
-                (vs {new Date(data.previous_snapshot_at).toLocaleString()})
-              </span>
+            {data && (
+              <>
+                Last snapshot: {new Date(data.snapshot_at).toLocaleString()}
+                {data.baseline_snapshot_at && (
+                  <span style={{ marginLeft: '0.5rem', color: '#555' }}>
+                    (vs {new Date(data.baseline_snapshot_at).toLocaleString()})
+                  </span>
+                )}
+              </>
             )}
           </div>
         </div>
-        <button
-          onClick={doRefresh}
-          disabled={refreshing}
-          style={{
-            padding: '0.5rem 1rem',
-            borderRadius: '6px',
-            border: '1px solid #333',
-            background: '#1a1a1a',
-            color: refreshing ? '#555' : '#e0e0e0',
-            cursor: refreshing ? 'not-allowed' : 'pointer',
-            fontSize: '0.875rem',
-          }}
-        >
-          {refreshing ? 'Refreshing...' : '⟳ Refresh'}
-        </button>
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          <span style={{ fontSize: '0.75rem', color: '#666' }}>Compare:</span>
+          <div style={{ display: 'flex', borderRadius: '6px', overflow: 'hidden', border: '1px solid #333' }}>
+            {[1, 3, 7].map(days => (
+              <button
+                key={days}
+                onClick={() => setCompareDays(days)}
+                style={{
+                  padding: '0.375rem 0.75rem',
+                  border: 'none',
+                  borderLeft: days !== 1 ? '1px solid #333' : 'none',
+                  background: compareDays === days ? '#7c4dff33' : '#1a1a1a',
+                  color: compareDays === days ? '#7c4dff' : '#888',
+                  cursor: 'pointer',
+                  fontSize: '0.8rem',
+                }}
+              >
+                {days === 1 ? 'Today' : `${days}d`}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={doRefresh}
+            disabled={refreshing}
+            style={{
+              padding: '0.5rem 1rem',
+              borderRadius: '6px',
+              border: '1px solid #333',
+              background: '#1a1a1a',
+              color: refreshing ? '#555' : '#e0e0e0',
+              cursor: refreshing ? 'not-allowed' : 'pointer',
+              fontSize: '0.875rem',
+            }}
+          >
+            {refreshing ? 'Refreshing...' : '⟳ Refresh'}
+          </button>
+        </div>
       </div>
 
-      {/* Day Change Summary Bar */}
-      {data?.day_changes && data.day_changes.length > 0 && changeSummary && (
+      {/* Change Summary Bar */}
+      {data?.baseline_changes && data.baseline_changes.length > 0 && changeSummary && (
         <div style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
@@ -233,7 +266,7 @@ export default function Holdings({ walletId }: { walletId: number | null }) {
           marginBottom: '1.5rem',
         }}>
           <SummaryCard
-            label="Net Change"
+            label={`Net Change (${compareLabel})`}
             value={formatUsd(changeSummary.netChange)}
             color={changeSummary.netChange >= 0 ? '#4caf50' : '#f44336'}
           />
@@ -443,7 +476,7 @@ export default function Holdings({ walletId }: { walletId: number | null }) {
                       {change && (
                         <div style={{ padding: '1rem 0', borderBottom: '1px solid #333', marginBottom: '1rem' }}>
                           <div style={{ fontSize: '0.75rem', color: '#888', textTransform: 'uppercase', marginBottom: '0.75rem' }}>
-                            Position Changes
+                            Position Changes ({compareLabel})
                             <span style={{
                               marginLeft: '0.5rem',
                               fontSize: '0.7rem',

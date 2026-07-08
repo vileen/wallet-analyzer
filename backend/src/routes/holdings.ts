@@ -4,7 +4,7 @@ import {
   saveHoldingsSnapshot,
   getLatestSnapshot,
   getPreviousSnapshot,
-  getDayStartSnapshot,
+  getBaselineSnapshot,
   computeHoldingChanges,
   HoldingChange,
 } from '../holdings';
@@ -16,7 +16,7 @@ const router = Router();
 // GET /api/holdings/:id — returns latest snapshot with changes
 router.get('/:id', async (req: AuthRequest, res) => {
   const { id } = req.params;
-  const { refresh } = req.query;
+  const { refresh, compare } = req.query;
 
   const wallet = await query('SELECT id, address FROM wallets WHERE id = $1', [id]);
   if (wallet.rows.length === 0) {
@@ -40,24 +40,27 @@ router.get('/:id', async (req: AuthRequest, res) => {
       return;
     }
 
-    // Get previous snapshot for comparison
+    // Get previous snapshot for comparison (15-min interval)
     const previous = await getPreviousSnapshot(walletId, snapshot.id);
     let changes: HoldingChange[] = [];
     if (previous) {
       changes = computeHoldingChanges(snapshot.items, previous.items);
     }
 
-    // Get day start snapshot for day-long changes
-    const dayStart = await getDayStartSnapshot(walletId);
-    let dayChanges: HoldingChange[] = [];
-    if (dayStart && dayStart.id !== snapshot.id) {
-      dayChanges = computeHoldingChanges(snapshot.items, dayStart.items);
+    // Get baseline snapshot for longer-term comparison
+    const compareDays = parseInt(compare as string, 10) || 1;
+    const baseline = await getBaselineSnapshot(walletId, compareDays);
+    let baselineChanges: HoldingChange[] = [];
+    if (baseline && baseline.id !== snapshot.id) {
+      baselineChanges = computeHoldingChanges(snapshot.items, baseline.items);
     }
 
     res.json({
       ...snapshot,
       changes,
-      day_changes: dayChanges,
+      baseline_changes: baselineChanges,
+      baseline_days: compareDays,
+      baseline_snapshot_at: baseline?.snapshot_at || null,
       previous_snapshot_at: previous?.snapshot_at || null,
     });
   } catch (error) {
@@ -69,6 +72,7 @@ router.get('/:id', async (req: AuthRequest, res) => {
 // POST /api/holdings/:id/refresh — force refresh and save new snapshot
 router.post('/:id/refresh', async (req: AuthRequest, res) => {
   const { id } = req.params;
+  const { compare } = req.query;
 
   const wallet = await query('SELECT id, address FROM wallets WHERE id = $1', [id]);
   if (wallet.rows.length === 0) {
@@ -84,16 +88,19 @@ router.post('/:id/refresh', async (req: AuthRequest, res) => {
       changes = computeHoldingChanges(snapshot.items, previous.items);
     }
 
-    const dayStart = await getDayStartSnapshot(wallet.rows[0].id);
-    let dayChanges: HoldingChange[] = [];
-    if (dayStart && dayStart.id !== snapshot.id) {
-      dayChanges = computeHoldingChanges(snapshot.items, dayStart.items);
+    const compareDays = parseInt(compare as string, 10) || 1;
+    const baseline = await getBaselineSnapshot(wallet.rows[0].id, compareDays);
+    let baselineChanges: HoldingChange[] = [];
+    if (baseline && baseline.id !== snapshot.id) {
+      baselineChanges = computeHoldingChanges(snapshot.items, baseline.items);
     }
 
     res.json({
       ...snapshot,
       changes,
-      day_changes: dayChanges,
+      baseline_changes: baselineChanges,
+      baseline_days: compareDays,
+      baseline_snapshot_at: baseline?.snapshot_at || null,
       previous_snapshot_at: previous?.snapshot_at || null,
     });
   } catch (error) {
