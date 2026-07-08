@@ -187,9 +187,20 @@ function getTypeStyle(type: string) {
 
 function formatAmount(amount: number | string, decimals: number = 6) {
   const num = typeof amount === 'string' ? parseFloat(amount) : amount;
+  const abs = Math.abs(num);
   if (num === 0) return '0';
-  if (num < 0.001) return num.toExponential(2);
-  return num.toLocaleString('en-US', { maximumFractionDigits: decimals });
+  if (abs < 0.001) return num.toExponential(2);
+  if (abs < 1000) return num.toLocaleString('en-US', { maximumFractionDigits: decimals });
+  if (abs < 1_000_000) return compact(num, 1_000, 'K');
+  if (abs < 1_000_000_000) return compact(num, 1_000_000, 'M');
+  if (abs < 1_000_000_000_000) return compact(num, 1_000_000_000, 'B');
+  return compact(num, 1_000_000_000_000, 'T');
+}
+
+function compact(n: number, div: number, suffix: string) {
+  const val = n / div;
+  const str = val.toFixed(1).replace(/\.0$/, '');
+  return str + suffix;
 }
 
 function formatAddress(addr: string) { return addr.slice(0, 6) + '...' + addr.slice(-4); }
