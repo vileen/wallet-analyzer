@@ -31,45 +31,6 @@ function SolscanLink({ type, value, children, style: customStyle }: { type: 'acc
   );
 }
 
-function CopyButton({ value }: { value: string }) {
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    try {
-      await navigator.clipboard.writeText(value);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
-      const textarea = document.createElement('textarea');
-      textarea.value = value;
-      document.body.appendChild(textarea);
-      textarea.select();
-      document.execCommand('copy');
-      document.body.removeChild(textarea);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    }
-  };
-
-  return (
-    <span
-      onClick={handleCopy}
-      title={copied ? 'Copied!' : 'Copy'}
-      style={{
-        cursor: 'pointer',
-        marginLeft: '0.25rem',
-        fontSize: '0.7rem',
-        color: copied ? '#4caf50' : '#555',
-        transition: 'color 0.2s',
-        userSelect: 'none',
-      }}
-    >
-      {copied ? '✓' : '⎘'}
-    </span>
-  );
-}
-
 interface Transaction {
   id: number;
   signature: string;
@@ -236,12 +197,9 @@ function TxRow({ tx }: { tx: Transaction }) {
         <div style={{ fontWeight: 500, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <span>{formatAmount(tx.amount)}</span>
           {tx.token_mint ? (
-            <>
-              <AxiomLink mint={tx.token_pool_address || tx.token_mint}>
-                {tx.token_symbol}
-              </AxiomLink>
-              <CopyButton value={tx.token_mint} />
-            </>
+            <AxiomLink mint={tx.token_pool_address || tx.token_mint}>
+              {tx.token_symbol}
+            </AxiomLink>
           ) : (
             tx.token_symbol
           )}
@@ -258,18 +216,15 @@ function TxRow({ tx }: { tx: Transaction }) {
           <SolscanLink type="account" value={tx.from_address}>
             {formatAddress(tx.from_address)}
           </SolscanLink>
-          <CopyButton value={tx.from_address} />
           <span>→</span>
           <SolscanLink type="account" value={tx.to_address}>
             {formatAddress(tx.to_address)}
           </SolscanLink>
-          <CopyButton value={tx.to_address} />
         </div>
         <div style={{ fontSize: '0.75rem', marginTop: '0.25rem', display: 'flex', alignItems: 'center' }}>
           <SolscanLink type="tx" value={tx.signature} style={{ fontSize: '0.7rem', color: '#555' }}>
             {tx.signature.slice(0, 16)}...{tx.signature.slice(-8)}
           </SolscanLink>
-          <CopyButton value={tx.signature} />
         </div>
       </div>
 
@@ -278,7 +233,7 @@ function TxRow({ tx }: { tx: Transaction }) {
       </div>
 
       <div style={{ textAlign: 'right', fontSize: '0.75rem', color: '#888' }}>
-        {tx.wallet_label || 'Unknown'}
+        {tx.wallet_label}
       </div>
 
       <div style={{ textAlign: 'right', fontSize: '0.75rem', color: '#666' }}>
@@ -291,7 +246,6 @@ function TxRow({ tx }: { tx: Transaction }) {
 export default function TransactionList({ walletId, refreshKey }: { walletId: number | null; refreshKey?: number }) {
   const [txs, setTxs] = useState<Transaction[]>([]);
   const [filter, setFilter] = useState('');
-  const [showSpam, setShowSpam] = useState(false);
   const [loading, setLoading] = useState(true);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
@@ -302,7 +256,6 @@ export default function TransactionList({ walletId, refreshKey }: { walletId: nu
       const data = await txApi.list({
         wallet_id: walletId || undefined,
         type: filter || undefined,
-        show_spam: showSpam,
       });
       setTxs(data);
     } finally {
@@ -314,7 +267,7 @@ export default function TransactionList({ walletId, refreshKey }: { walletId: nu
   useEffect(() => {
     fetchTxs(false);
     setIsInitialLoad(false);
-  }, [walletId, filter, showSpam]);
+  }, [walletId, filter]);
 
   // Silent refresh from polling (no spinner, no UI shift)
   useEffect(() => {
@@ -368,15 +321,6 @@ export default function TransactionList({ walletId, refreshKey }: { walletId: nu
           <option value="liquidity_add">Add Liquidity</option>
           <option value="liquidity_remove">Remove Liquidity</option>
         </select>
-
-        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.875rem' }}>
-          <input
-            type="checkbox"
-            checked={showSpam}
-            onChange={e => setShowSpam(e.target.checked)}
-          />
-          Show spam
-        </label>
       </div>
 
       {loading ? (
@@ -470,12 +414,9 @@ export default function TransactionList({ walletId, refreshKey }: { walletId: nu
                               <div style={{ fontWeight: 500, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                 <span>{formatAmount(item.totalAmount)}</span>
                                 {item.token_mint ? (
-                                  <>
-                                    <AxiomLink mint={item.token_pool_address || item.token_mint}>
-                                      {item.token_symbol}
-                                    </AxiomLink>
-                                    <CopyButton value={item.token_mint} />
-                                  </>
+                                  <AxiomLink mint={item.token_pool_address || item.token_mint}>
+                                    {item.token_symbol}
+                                  </AxiomLink>
                                 ) : (
                                   item.token_symbol
                                 )}
@@ -508,7 +449,7 @@ export default function TransactionList({ walletId, refreshKey }: { walletId: nu
                             </div>
 
                             <div style={{ textAlign: 'right', fontSize: '0.75rem', color: '#888' }}>
-                              {firstTx.wallet_label || 'Unknown'}
+                              {firstTx.wallet_label}
                             </div>
 
                             <div style={{ textAlign: 'right', fontSize: '0.75rem', color: '#666' }}>

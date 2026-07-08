@@ -16,45 +16,6 @@ function SolscanLink({ type, value, children }: { type: 'account' | 'tx' | 'toke
   );
 }
 
-function CopyButton({ value }: { value: string }) {
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    try {
-      await navigator.clipboard.writeText(value);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
-      const textarea = document.createElement('textarea');
-      textarea.value = value;
-      document.body.appendChild(textarea);
-      textarea.select();
-      document.execCommand('copy');
-      document.body.removeChild(textarea);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    }
-  };
-
-  return (
-    <span
-      onClick={handleCopy}
-      title={copied ? 'Copied!' : 'Copy'}
-      style={{
-        cursor: 'pointer',
-        marginLeft: '0.35rem',
-        fontSize: '0.75rem',
-        color: copied ? '#4caf50' : '#666',
-        transition: 'color 0.2s',
-        userSelect: 'none',
-      }}
-    >
-      {copied ? '✓' : '⎘'}
-    </span>
-  );
-}
-
 interface Wallet {
   id: number;
   address: string;
@@ -166,19 +127,15 @@ export default function WalletList({
             title={w.address}
           >
             {w.label || (
-              <>
-                <SolscanLink type="account" value={w.address}>
-                  {w.address.slice(0, 8) + '...' + w.address.slice(-4)}
-                </SolscanLink>
-                <CopyButton value={w.address} />
-              </>
+              <SolscanLink type="account" value={w.address}>
+                {w.address.slice(0, 8) + '...' + w.address.slice(-4)}
+              </SolscanLink>
             )}
             {w.label && (
               <span style={{ fontSize: '0.75rem', color: '#888', marginLeft: '0.5rem' }}>
                 <SolscanLink type="account" value={w.address}>
                   {w.address.slice(0, 6)}...{w.address.slice(-4)}
                 </SolscanLink>
-                <CopyButton value={w.address} />
               </span>
             )}
           </button>

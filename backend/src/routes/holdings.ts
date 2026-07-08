@@ -4,6 +4,7 @@ import {
   saveHoldingsSnapshot,
   getLatestSnapshot,
   getPreviousSnapshot,
+  getDayStartSnapshot,
   computeHoldingChanges,
   HoldingChange,
 } from '../holdings';
@@ -46,9 +47,17 @@ router.get('/:id', async (req: AuthRequest, res) => {
       changes = computeHoldingChanges(snapshot.items, previous.items);
     }
 
+    // Get day start snapshot for day-long changes
+    const dayStart = await getDayStartSnapshot(walletId);
+    let dayChanges: HoldingChange[] = [];
+    if (dayStart && dayStart.id !== snapshot.id) {
+      dayChanges = computeHoldingChanges(snapshot.items, dayStart.items);
+    }
+
     res.json({
       ...snapshot,
       changes,
+      day_changes: dayChanges,
       previous_snapshot_at: previous?.snapshot_at || null,
     });
   } catch (error) {
@@ -75,9 +84,16 @@ router.post('/:id/refresh', async (req: AuthRequest, res) => {
       changes = computeHoldingChanges(snapshot.items, previous.items);
     }
 
+    const dayStart = await getDayStartSnapshot(wallet.rows[0].id);
+    let dayChanges: HoldingChange[] = [];
+    if (dayStart && dayStart.id !== snapshot.id) {
+      dayChanges = computeHoldingChanges(snapshot.items, dayStart.items);
+    }
+
     res.json({
       ...snapshot,
       changes,
+      day_changes: dayChanges,
       previous_snapshot_at: previous?.snapshot_at || null,
     });
   } catch (error) {

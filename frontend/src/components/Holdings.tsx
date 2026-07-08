@@ -30,6 +30,7 @@ interface HoldingsResponse {
   sol_balance: number | string | null;
   items: HoldingItem[];
   changes: HoldingChange[];
+  day_changes: HoldingChange[];
   previous_snapshot_at: string | null;
 }
 
@@ -119,18 +120,18 @@ export default function Holdings({ walletId }: { walletId: number | null }) {
     }
   }, [walletId, viewMode, dailyDays]);
 
-  // Build a map of changes by mint
+  // Build a map of changes by mint (using day changes for persistent indicators)
   const changesByMint = useMemo(() => {
     const map = new Map<string, HoldingChange>();
-    data?.changes?.forEach(c => map.set(c.mint, c));
+    data?.day_changes?.forEach(c => map.set(c.mint, c));
     return map;
   }, [data]);
 
-  // Group changes by direction for summary
+  // Group changes by direction for summary (use day changes for daily summary)
   const changeSummary = useMemo(() => {
-    if (!data?.changes) return null;
-    const inflow = data.changes.filter(c => c.direction === 'inflow' || c.direction === 'new');
-    const outflow = data.changes.filter(c => c.direction === 'outflow' || c.direction === 'removed');
+    if (!data?.day_changes) return null;
+    const inflow = data.day_changes.filter(c => c.direction === 'inflow' || c.direction === 'new');
+    const outflow = data.day_changes.filter(c => c.direction === 'outflow' || c.direction === 'removed');
     const totalIn = inflow.reduce((s, c) => s + toNum(c.change_value_usd), 0);
     const totalOut = outflow.reduce((s, c) => s + toNum(c.change_value_usd), 0);
     const netChange = totalIn - totalOut;
@@ -184,26 +185,6 @@ export default function Holdings({ walletId }: { walletId: number | null }) {
   const getAllocationColor = (index: number) => {
     const colors = ['#7c4dff', '#4caf50', '#ff9800', '#f44336', '#2196f3', '#9c27b0', '#00bcd4'];
     return colors[index % colors.length];
-  };
-
-  const getChangeColor = (direction: string) => {
-    switch (direction) {
-      case 'inflow':
-      case 'new': return '#4caf50';
-      case 'outflow':
-      case 'removed': return '#f44336';
-      default: return '#888';
-    }
-  };
-
-  const getChangeLabel = (direction: string) => {
-    switch (direction) {
-      case 'inflow': return 'Increased';
-      case 'outflow': return 'Decreased';
-      case 'new': return 'New Position';
-      case 'removed': return 'Removed';
-      default: return 'Changed';
-    }
   };
 
   if (!walletId) {
@@ -573,16 +554,26 @@ export default function Holdings({ walletId }: { walletId: number | null }) {
                           {h.name}
                         </span>
                         {isSol && <span style={{ fontSize: '0.625rem', background: '#14f19533', color: '#14f195', padding: '1px 6px', borderRadius: '4px' }}>SOL</span>}
-                        {change && (
+                        {change && (change.direction === 'new' || change.direction === 'inflow') && (
                           <span style={{
                             fontSize: '0.7rem',
                             padding: '1px 6px',
                             borderRadius: '4px',
-                            background: `${getChangeColor(change.direction)}22`,
-                            color: getChangeColor(change.direction),
+                            background: '#4caf5022',
+                            color: '#4caf50',
                           }}>
-                            {change.direction === 'inflow' || change.direction === 'new' ? '↑' : '↓'}
-                            {formatUsd(change.change_value_usd)}
+                            New
+                          </span>
+                        )}
+                        {change && (change.direction === 'removed' || change.direction === 'outflow') && (
+                          <span style={{
+                            fontSize: '0.7rem',
+                            padding: '1px 6px',
+                            borderRadius: '4px',
+                            background: '#f4433622',
+                            color: '#f44336',
+                          }}>
+                            Sold
                           </span>
                         )}
                       </div>
@@ -633,51 +624,7 @@ export default function Holdings({ walletId }: { walletId: number | null }) {
                   {/* Expanded Details */}
                   {isExpanded && (
                     <div style={{ padding: '0 1rem 1rem', borderTop: '1px solid #333' }}>
-                      {/* Position Changes */}
-                      {change && (
-                        <div style={{ padding: '1rem 0', borderBottom: '1px solid #333', marginBottom: '1rem' }}>
-                          <div style={{ fontSize: '0.75rem', color: '#888', textTransform: 'uppercase', marginBottom: '0.75rem' }}>
-                            Position Changes
-                            <span style={{
-                              marginLeft: '0.5rem',
-                              fontSize: '0.7rem',
-                              padding: '2px 8px',
-                              borderRadius: '4px',
-                              background: `${getChangeColor(change.direction)}22`,
-                              color: getChangeColor(change.direction),
-                              fontWeight: 600,
-                            }}>
-                              {getChangeLabel(change.direction)}
-                            </span>
-                          </div>
-                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '1rem' }}>
-                            <div>
-                              <div style={{ fontSize: '0.75rem', color: '#888' }}>Previous</div>
-                              <div style={{ fontSize: '0.875rem', color: '#ccc' }}>
-                                {toNum(change.previous_amount) > 0 ? formatAmount(change.previous_amount) : '-'}
-                              </div>
-                            </div>
-                            <div>
-                              <div style={{ fontSize: '0.75rem', color: '#888' }}>Current</div>
-                              <div style={{ fontSize: '0.875rem', color: '#ccc' }}>{formatAmount(change.current_amount)}</div>
-                            </div>
-                            <div>
-                              <div style={{ fontSize: '0.75rem', color: '#888' }}>Change</div>
-                              <div style={{ fontSize: '0.875rem', color: getChangeColor(change.direction) }}>
-                                {toNum(change.change_amount) > 0 ? '+' : ''}{formatAmount(change.change_amount)}
-                              </div>
-                            </div>
-                            <div>
-                              <div style={{ fontSize: '0.75rem', color: '#888' }}>Value Impact</div>
-                              <div style={{ fontSize: '0.875rem', color: getChangeColor(change.direction), fontWeight: 600 }}>
-                                {toNum(change.change_value_usd) > 0 ? '+' : ''}{formatUsd(change.change_value_usd)}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', paddingTop: '1rem' }}>
                         <div>
                           <div style={{ fontSize: '0.75rem', color: '#888', marginBottom: '0.25rem' }}>Full Mint Address</div>
                           <div style={{ fontSize: '0.875rem', color: '#ccc', wordBreak: 'break-all' }}>{h.mint}</div>
@@ -686,14 +633,6 @@ export default function Holdings({ walletId }: { walletId: number | null }) {
                           <div style={{ fontSize: '0.75rem', color: '#888', marginBottom: '0.25rem' }}>Raw Amount</div>
                           <div style={{ fontSize: '0.875rem', color: '#ccc' }}>{toNum(h.amount).toLocaleString('en-US', { maximumFractionDigits: h.decimals })}</div>
                         </div>
-                        {h.pool_address && (
-                          <div>
-                            <div style={{ fontSize: '0.75rem', color: '#888', marginBottom: '0.25rem' }}>Pool Address</div>
-                            <div style={{ fontSize: '0.875rem', color: '#ccc', wordBreak: 'break-all' }}>
-                              <AxiomLink mint={h.pool_address}>{h.pool_address}</AxiomLink>
-                            </div>
-                          </div>
-                        )}
                         <div>
                           <div style={{ fontSize: '0.75rem', color: '#888', marginBottom: '0.25rem' }}>Links</div>
                           <div style={{ display: 'flex', gap: '0.5rem' }}>
