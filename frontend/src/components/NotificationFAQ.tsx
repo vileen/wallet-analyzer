@@ -27,7 +27,7 @@ export default function NotificationFAQ() {
   return (
     <div style={{ marginTop: '1rem', padding: '1rem', background: '#1a1a1a', borderRadius: '8px', border: '1px solid #333' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-        <h3 style={{ fontSize: '0.875rem', fontWeight: 600, margin: 0 }}>iOS Notifications Setup</h3>
+        <h3 style={{ fontSize: '0.875rem', fontWeight: 600, margin: 0 }}>iOS Notifications via Shortcuts</h3>
         <button
           onClick={() => setIsOpen(false)}
           style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer', fontSize: '1.25rem' }}
@@ -38,30 +38,39 @@ export default function NotificationFAQ() {
 
       <div style={{ fontSize: '0.8rem', color: '#ccc', lineHeight: 1.6 }}>
         <p style={{ marginBottom: '0.75rem' }}>
-          To receive push notifications for wallet activity on your iPhone/iPad:
+          iOS doesn't allow websites to send push notifications directly. Use the <strong>Shortcuts</strong> app instead:
         </p>
 
         <ol style={{ paddingLeft: '1.25rem', marginBottom: '0.75rem' }}>
           <li style={{ marginBottom: '0.5rem' }}>
-            <strong>Open this app in Safari</strong> — Add to Home Screen for the best experience (Share → Add to Home Screen)
+            <strong>Open Shortcuts app</strong> → Automation tab → Create Personal Automation
           </li>
           <li style={{ marginBottom: '0.5rem' }}>
-            <strong>Enable Push Notifications</strong> — When prompted, tap "Allow" for notifications. If you missed the prompt, go to Settings → Safari → Notifications → Allow
+            <strong>Choose trigger:</strong> Time of Day → Set to check every hour (or whatever interval you want)
           </li>
           <li style={{ marginBottom: '0.5rem' }}>
-            <strong>Check per-wallet settings</strong> — In this app, click the bell icon (🔔/🔕) next to each wallet to toggle notifications on/off
+            <strong>Add action:</strong> Get contents of URL → Paste your API endpoint:
+            <code style={{ display: 'block', background: '#252525', padding: '0.5rem', borderRadius: '4px', marginTop: '0.25rem', fontSize: '0.75rem', wordBreak: 'break-all' }}>
+              https://solana-tracker.vileen.pl/api/notifications?unread=true
+            </code>
           </li>
           <li style={{ marginBottom: '0.5rem' }}>
-            <strong>Keep the app running</strong> — Safari periodically checks for updates. Keep the app open occasionally or add it to your Home Screen for background refresh
+            <strong>Add action:</strong> Get Dictionary Value → Get <code>notifications</code> array from the JSON
+          </li>
+          <li style={{ marginBottom: '0.5rem' }}>
+            <strong>Add action:</strong> If → Count of notifications &gt; 0
+          </li>
+          <li style={{ marginBottom: '0.5rem' }}>
+            <strong>Inside If:</strong> Show Notification → Title: "Wallet Activity" → Body: "X new transactions"
           </li>
         </ol>
 
-        <p style={{ marginBottom: '0.5rem' }}>
-          <strong>Note:</strong> iOS Safari push notifications require the app to be added to the Home Screen and opened at least once. Notifications are sent via the web push API and may be delayed by iOS's power management.
+        <p style={{ marginBottom: '0.5rem', color: '#888' }}>
+          <strong>Tip:</strong> You can also trigger the shortcut manually from the Shortcuts app or widget. For more detailed notifications, parse individual items from the JSON response.
         </p>
 
         <p style={{ color: '#888', fontSize: '0.75rem' }}>
-          If notifications aren't working, try: Settings → Notifications → Safari → Allow Notifications → toggle off and on again.
+          Note: Background automation requires the device to be unlocked. Consider using a time-based trigger when you're likely to be using your phone.
         </p>
       </div>
     </div>
