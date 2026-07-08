@@ -35,7 +35,7 @@ export const wallets = {
   list: () => api('/api/wallets'),
   create: (data: { address: string; label?: string }) => api('/api/wallets', { method: 'POST', body: JSON.stringify(data) }),
   delete: (id: number) => api(`/api/wallets/${id}`, { method: 'DELETE' }),
-  update: (id: number, data: { label?: string; is_active?: boolean }) => api(`/api/wallets/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  update: (id: number, data: { label?: string; is_active?: boolean; notifications_enabled?: boolean }) => api(`/api/wallets/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
 };
 
 export const holdings = {

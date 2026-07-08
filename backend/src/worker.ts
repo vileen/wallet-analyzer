@@ -161,13 +161,17 @@ async function processTransaction(
 
   // Send notification for significant transactions (non-spam, or spam but large)
   if (!isSpam && usdValue !== null && usdValue >= 1) {
-    await notifyNewTransaction(
-      walletId,
-      type,
-      tokenInfo?.symbol || 'Unknown',
-      primaryTransfer.amount,
-      usdValue,
-      tx.signature
-    );
+    // Check if notifications are enabled for this wallet
+    const walletSettings = await query('SELECT notifications_enabled FROM wallets WHERE id = $1', [walletId]);
+    if (walletSettings.rows.length > 0 && walletSettings.rows[0].notifications_enabled !== false) {
+      await notifyNewTransaction(
+        walletId,
+        type,
+        tokenInfo?.symbol || 'Unknown',
+        primaryTransfer.amount,
+        usdValue,
+        tx.signature
+      );
+    }
   }
 }

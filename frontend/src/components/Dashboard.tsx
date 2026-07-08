@@ -3,12 +3,14 @@ import { auth, wallets as walletsApi, transactions as txApi } from '../api/clien
 import WalletList from './WalletList';
 import TransactionList from './TransactionList';
 import Holdings from './Holdings';
+import NotificationFAQ from './NotificationFAQ';
 
 interface Wallet {
   id: number;
   address: string;
   label: string | null;
   is_active: boolean;
+  notifications_enabled: boolean;
 }
 
 interface TxStats {
@@ -134,6 +136,8 @@ export default function Dashboard({ onLogout }: { onLogout: () => void }) {
               </div>
             ))}
           </div>
+
+          <NotificationFAQ />
         </div>
 
         <div>

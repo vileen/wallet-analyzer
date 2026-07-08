@@ -5,7 +5,7 @@ import { AuthRequest } from '../auth';
 const router = Router();
 
 router.get('/', async (req: AuthRequest, res) => {
-  const result = await query('SELECT id, address, label, is_active, created_at FROM wallets ORDER BY created_at DESC');
+  const result = await query('SELECT id, address, label, is_active, notifications_enabled, created_at FROM wallets ORDER BY created_at DESC');
   res.json(result.rows);
 });
 
@@ -40,11 +40,11 @@ router.delete('/:id', async (req: AuthRequest, res) => {
 
 router.patch('/:id', async (req: AuthRequest, res) => {
   const { id } = req.params;
-  const { label, is_active } = req.body;
+  const { label, is_active, notifications_enabled } = req.body;
   
   const result = await query(
-    'UPDATE wallets SET label = COALESCE($1, label), is_active = COALESCE($2, is_active) WHERE id = $3 RETURNING *',
-    [label, is_active, id]
+    'UPDATE wallets SET label = COALESCE($1, label), is_active = COALESCE($2, is_active), notifications_enabled = COALESCE($3, notifications_enabled) WHERE id = $4 RETURNING *',
+    [label, is_active, notifications_enabled, id]
   );
   
   if (result.rows.length === 0) {
